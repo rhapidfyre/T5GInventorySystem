@@ -10,7 +10,10 @@
 
 void UInventoryComponent::BeginPlay()
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: BeginPlay()"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): BeginPlay()"), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     Super::BeginPlay();
     
     const AActor* ownerActor = GetOwner();
@@ -18,6 +21,11 @@ void UInventoryComponent::BeginPlay()
     {
         UE_LOG(LogTemp, Error, TEXT("Inventory has no owner. Removed."));
         this->DestroyComponent(); // Kills itself, it failed validation
+    }
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): Play Started. %d Slots and %d Equipment Slots"),
+        GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), getNumInventorySlots(), getNumEquipmentSlots());
     }
 }
 
@@ -121,8 +129,9 @@ void UInventoryComponent::OnComponentCreated()
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: OnComponentCreated"));
     Super::OnComponentCreated();
     RegisterComponent();
-	SetAutoActivate(true);
     InitializeInventory();
+	SetAutoActivate(true);
+    if (bVerboseOutput) bShowDebug = true;
     m_bIsInventoryReady = true;
 }
 

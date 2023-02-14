@@ -690,6 +690,14 @@ private: //functions
 
 public: //variables
 
+	// If true, "LogTemp" will display information regarding failures and more. Is true if Verbose is true.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bShowDebug = false;
+	
+	// If true, "LogTemp" will display basically everything the inventory does.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bVerboseOutput = false;
+
     UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
         bool bShowNotifications = true;
 
@@ -720,8 +728,6 @@ private: //variables
 	TArray<FStInventoryNotify> m_notifications;
 	
     bool m_bIsInventoryReady = false;
-
-	
 
 	//-------------------------
 	//-------------------------          REPLICATION
