@@ -1,6 +1,5 @@
 
-#include "ItemData.h"
-#include "../../FunctionLibrary/ProjectData.h"
+#include "lib/ItemData.h"
 
 UDataTable* UItemSystem::getItemDataTable()
 {

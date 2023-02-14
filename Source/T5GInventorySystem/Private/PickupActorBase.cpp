@@ -1,6 +1,8 @@
 ﻿#include "PickupActorBase.h"
 
+#include "InventoryComponent.h"
 #include "NavigationSystemTypes.h"
+#include "GameFramework/Character.h"
 #include "Net/UnrealNetwork.h"
 
 // Default Constructor. Runs as soon as the actor becomes available in the editor.
@@ -15,10 +17,6 @@ APickupActorBase::APickupActorBase()
 	bReplicates = true;
 	
 	SetMobility(EComponentMobility::Movable);
-
-	// Creates the interaction component. This is PRE-SETTINGS.
-	// If you implement different variable values in blueprints, this runs before those values are read.
-	InteractionComponent = CreateDefaultSubobject<UInteractionComponent>(TEXT("Interaction"));
 	
 }
 
@@ -68,14 +66,6 @@ void APickupActorBase::PostLoad()
 
 void APickupActorBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (HasAuthority())
-	{
-		// Bind pickup to interaction event
-		if (IsValid(InteractionComponent))
-		{
-			InteractionComponent->OnInteraction.RemoveAll(this);
-		}
-	}
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -99,15 +89,6 @@ void APickupActorBase::BeginPlay()
 	else
 		SetupItemData();
 	
-	if (HasAuthority())
-	{
-		// Bind pickup to interaction event
-		if (IsValid(InteractionComponent))
-		{
-			if (!InteractionComponent->OnInteraction.IsAlreadyBound(this, &APickupActorBase::OnPickedUp))
-				 InteractionComponent->OnInteraction.AddDynamic(this, &APickupActorBase::OnPickedUp);
-		}
-	}
 	
 }
 
@@ -196,7 +177,7 @@ void APickupActorBase::OnPickedUp(AActor* targetActor)
 			return;
 		}
 		
-		APrimaryPlayerCharacter* playerRef = Cast<APrimaryPlayerCharacter>(targetActor);
+		const ACharacter* playerRef = Cast<ACharacter>(targetActor);
 		if (IsValid(playerRef))
 		{
 			UE_LOG(LogTemp, Display, TEXT("%s(%s): Target Actor is a Player"), *GetName(),

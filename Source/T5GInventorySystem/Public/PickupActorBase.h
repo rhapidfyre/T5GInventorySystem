@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "AdventureZero/Characters/PrimaryPlayerCharacter.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMeshActor.h"
 #include "lib/ItemData.h"
@@ -48,11 +47,7 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void SetupItemFromData(FStItemData itemData, int quantity = 1);
 	
-	// Implements interaction with this actor (makes it so you can pick it up with E)
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Actor Components")
-	UInteractionComponent* InteractionComponent;
-	
-	UFUNCTION()
+	UFUNCTION(BlueprintCallable)
 	void OnPickedUp(AActor* targetActor);
 	
 protected:

@@ -3,8 +3,7 @@
 #include "InventoryComponent.h"
 
 #include "PickupActorBase.h"
-#include "../FunctionLibrary/ProjectData.h"
-#include "AdventureZero/Characters/PrimaryPlayerCharacter.h"
+#include "GameFramework/Character.h"
 #include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h" // Used for replication
 
@@ -19,7 +18,6 @@ void UInventoryComponent::BeginPlay()
     {
         UE_LOG(LogTemp, Error, TEXT("Inventory has no owner. Removed."));
         this->DestroyComponent(); // Kills itself, it failed validation
-        return;
     }
 }
 
@@ -410,8 +408,6 @@ int UInventoryComponent::addItemByNameToSlot(
         // We failed to add the item entirely
         if (remainingItems == INT_MAX && encounteredError)
         {
-            const FString outMsg = (GetOwner())->GetName() + ": Failed to add item (reference object did not exist)";
-            UProjectData::AzDebugMessage(FColor::Red, outMsg);
             return -3;
         }
             
@@ -531,7 +527,6 @@ int UInventoryComponent::addItemFinalWithRemainder(FStItemData newItem, int toSl
     if (remainingItems == quantity && encounteredError)
     {
         const FString outMsg = (GetOwner())->GetName() + ": Failed to add item (reference object did not exist)";
-        UProjectData::AzDebugMessage(FColor::Red, outMsg);
         remainder = quantity;
         return -3;
     }
@@ -599,13 +594,13 @@ bool UInventoryComponent::doffEquipment(EEquipmentSlotType equipSlot, int slotNu
 {
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: doffEquipment"));
     // If destination inventory not provided, use this inventory
-    if (toInventory == nullptr) toInventory = this;
-    if (isInventoryReady())
+    if (!IsValid(toInventory)) toInventory = this;
+    if (toInventory->isInventoryReady())
     {
         // Make sure the destination slot is available
         if (slotNumber >= 0)
         {
-            if (!isEmptySlot(slotNumber))
+            if (!toInventory->isEmptySlot(slotNumber))
                 return false;
         }
 
@@ -616,7 +611,7 @@ bool UInventoryComponent::doffEquipment(EEquipmentSlotType equipSlot, int slotNu
             {
                 FStItemData itemData = getItemInSlot(fromSlot, true);
                 int itemsRemoved = removeItemFromSlot(fromSlot, INT_MAX, true, false, false, true);
-                addItemFromExistingToSlot(itemData, slotNumber, itemsRemoved, false, false, false);
+                toInventory->addItemFromExistingToSlot(itemData, slotNumber, itemsRemoved, false, false, false);
             }
         }
     }
@@ -736,12 +731,10 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
     FStItemData fromItem = fromInventory->getItemInSlot(fromSlotNum, fromEquipmentSlot);
     int fromQuantity     = fromInventory->getQuantityInSlot(fromSlotNum, fromEquipmentSlot);
     FStItemData toItem   = getItemInSlot(toSlotNum, isEquipmentSlot);
-    int toQuantity       = getQuantityInSlot(toSlotNum, isEquipmentSlot);
 
     // If the FROM item isn't valid, this is not a valid swap. Otherwise.... wtf are they swapping?
     if (!UItemSystem::getItemDataIsValid(fromItem))
     {
-        UProjectData::AzDebugMessage("swapSlots() failed - FROM item is not valid.");
         return false;
     }
 
@@ -755,7 +748,6 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
         isCorrectSlotType = (fromInventory->getInventorySlotType(fromSlotNum)) != EInventorySlotType::NONE;
     if (!isCorrectSlotType)
     {
-        UProjectData::AzDebugMessage("swapSlots() failed - FROM SLOT is invalid (invalid slot/type mismatch)");
         return false;
     }
 
@@ -770,7 +762,6 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
     }
     if (!destinationValid)
     {
-        UProjectData::AzDebugMessage("swapSlots() failed - TO SLOT is invalid (invalid slot/type mismatch)");
         return false;
     }
 
@@ -816,8 +807,6 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
         }
         if (!typeMatches)
         {
-            UProjectData::AzDebugMessage(FColor::Yellow, 
-            "Failed to swap items. One or both slot(s) is/are an equipment slot that doesn't match the required slot type.");
             return false;
         }
     }
@@ -827,7 +816,6 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
 
     // Step 2: Remember the item we used to have in this slot.
     FStItemData oldItem = getItemInSlot(toSlotNum, isEquipmentSlot); // Returns -1 if this slot was empty
-    int oldQuantity     = getQuantityInSlot(toSlotNum, isEquipmentSlot);
 
     // If the items match or the destination slot is empty, it will stack.
     // Otherwise it will swap the two slots.
@@ -839,8 +827,6 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
             int newSlot = addItemFromExistingToSlot(fromItem, toSlotNum, moveQuantity, true, false, showNotify);
             if (newSlot < 0)
             {
-                UProjectData::AzDebugMessage(FColor::Red, 
-                    "Inventory/Equip Swap Failed Unexpectedly");
                 return false;
             }
             return true;
@@ -853,8 +839,6 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
             int newSlot = addItemFromExistingToSlot(fromItem, toSlotNum, fromQuantity, true, false, showNotify);
             if (newSlot < 0)
             {
-                UProjectData::AzDebugMessage(FColor::Red, 
-                    "Inventory/Equip Swap Failed Unexpectedly");
                 return false;
             }
             return true;
@@ -907,7 +891,6 @@ bool UInventoryComponent::splitStack(
         const int qty = (splitQuantity >= existingQty) ? existingQty : splitQuantity;
         if (qty < 1)
         {
-            UProjectData::AzDebugMessage("splitStack() Quantity was less than 1.");
             return false;
         }
         
@@ -962,7 +945,6 @@ int UInventoryComponent::addItem(FStItemData newItem, int quantity, bool showNot
     // A negative slot number means to add it to the first available slot.
     if (!UItemSystem::getItemDataIsValid(newItem))
     {
-        UProjectData::AzDebugMessage(FColor::Red, "addItem() Failed to Create a new Item");
         return -1;
     }
 
@@ -1154,11 +1136,6 @@ void UInventoryComponent::resetInventorySlot(int slotNumber)
 
 void UInventoryComponent::InventoryUpdate(int slotNumber, bool isEquipment, bool isAtomic)
 {
-    UE_LOG(LogTemp, Display, TEXT("%s(%s): OnInventoryUpdated.Broadcast(%d, %s) - Delegates: %d"),
-        *GetName(), GetOwner()->HasAuthority()?TEXT("SRV"):TEXT("CLI"), slotNumber,
-        isEquipment?TEXT("true"):TEXT("false"),
-        OnInventoryUpdated.IsBound()?TEXT("Has Binds"):TEXT("No Binds"));
-    
     // Notify delegate so bound functions can trigger
     OnInventoryUpdated.Broadcast(slotNumber, isEquipment);
     
@@ -1270,8 +1247,8 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
     
     AActor* fromOwner = fromInventory->GetOwner();
     AActor* toOwner = toInventory->GetOwner();
-    const APrimaryPlayerCharacter* fromPlayer = Cast<APrimaryPlayerCharacter>(fromOwner);
-    const APrimaryPlayerCharacter* toPlayer   = Cast<APrimaryPlayerCharacter>(toOwner);
+    const ACharacter* fromPlayer = Cast<ACharacter>(fromOwner);
+    const ACharacter* toPlayer   = Cast<ACharacter>(toOwner);
 
     // Make sure destination inventory is not withdraw only. Ignore this if it's the player's own inventory.
     if (toInventory != this && toInventory->m_WithdrawOnly)
@@ -1436,60 +1413,59 @@ void UInventoryComponent::Server_DropItemOnGround_Implementation(UInventoryCompo
 {
     UE_LOG(LogTemp, Display, TEXT("InventoryComponent: Server_DropItemOnGround_Implementation"));
     if (!IsValid(fromInventory)) fromInventory = this;
-    bool authorizedAction = false;
 
     if (fromInventory->getItemInSlot(fromSlot, isFromEquipSlot).properName == UItemSystem::getInvalidName())
         return;
     
-    // If the inventory belongs to another player, log it and deny.
-    // Inventory Comp destroys itself if it has no owner, so this should always be valid.
-    AActor* ownerActor = fromInventory->GetOwner();
-    if (!IsValid(ownerActor)) return; // Just in case something went terribly wrong.
+    AActor* thatActor = fromInventory->GetOwner();
+    if (!IsValid(thatActor)) return; // Just in case something went terribly wrong.
 
-    // This can be invalid if the inventory belongs to an NPC or a storage container.
-    APrimaryPlayerCharacter* ownerPlayer = Cast<APrimaryPlayerCharacter>(ownerActor);
-
-    // Must be valid. Event comes from the client.
-    // Event is received from a client/player, so this should also always be valid.
-    APrimaryPlayerCharacter* thisPlayer = Cast<APrimaryPlayerCharacter>(GetOwner());
-    if (!IsValid(thisPlayer)) return; // Safety catch
+    AActor* thisActor = Cast<AActor>(GetOwner());
+    if (!IsValid(thatActor)) return; // Safety catch
     
-    if (IsValid(ownerPlayer))
+    // If the inventories belong to different actors, make sure it's not player v. player
+    if (thisActor != thatActor)
     {
-        // If the inventory belongs to the player, we can trust this 100% of the time.
-        authorizedAction = (GetOwner() == fromInventory->GetOwner());
-        if (!authorizedAction)
+        AController* thisController = thatActor->GetInstigatorController();
+        AController* thatController = thatActor->GetInstigatorController();
+
+        // If both actors are controlled, we may have a conflict
+        if (IsValid(thisController) && IsValid(thatController))
         {
-            UE_LOG(LogTemp, Error, TEXT("Player '%d' tried to toss items out of the inventory of another player (%d)"),
-                (thisPlayer->GetPlayerState()->GetPlayerId()),
-                (ownerPlayer->GetPlayerState()->GetPlayerId())
-            );
+            // Player trying to access another player's inventory. Deny.
+            if (thisController->IsPlayerController() && thatController->IsPlayerController())
+            {
+                return;
+            }
         }
     }
-    // target inventory is not a player. We can trust it, if the player is within a reasonable distance of it.
-    else authorizedAction = true;
 
-    if (authorizedAction)
+    ACharacter* thisCharacter = Cast<ACharacter>(thisActor);
+    if (IsValid(thisCharacter))
     {
         //const FVector fwdVector = thisPlayer->GetActorUpVector() * (-1);//thisPlayer->GetActorForwardVector();
         //const FVector spawnPosition = thisPlayer->GetActorLocation() - 88; //(fwdVector * 512.0f);
+        USkeletalMeshComponent* thisMesh = thisCharacter->GetMesh();
+        if (!IsValid(thisMesh)) return;
         
-        const FVector spawnPosition = thisPlayer->GetMesh()->GetBoneLocation("Root");
+        FTransform spawnTransform(
+            FRotator(FMath::RandRange(0.f,359.f),FMath::RandRange(0.f,359.f),FMath::RandRange(0.f,359.f)),
+            thisMesh->GetBoneLocation("Root"));
         FActorSpawnParameters spawnParams;
-        FRotator spawnRotation = FRotator(FMath::RandRange(0,359),FMath::RandRange(0,359),FMath::RandRange(0,359));
         spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
         
-        FStItemData itemCopy = fromInventory->getItemInSlot(fromSlot, isFromEquipSlot);
-        int itemQuantity = fromInventory->getQuantityInSlot(fromSlot, isFromEquipSlot);
-        int tossQuantity = (quantity > itemQuantity) ? itemQuantity : abs(quantity);
+        FStItemData itemCopy    = fromInventory->getItemInSlot(fromSlot, isFromEquipSlot);
+        int itemQuantity        = fromInventory->getQuantityInSlot(fromSlot, isFromEquipSlot);
+        int tossQuantity        = (quantity > itemQuantity) ? itemQuantity : abs(quantity);
 
-        //TODO - Change this to 'SpawnActorDeferred'
-        APickupActorBase* pickupItem = GetWorld()->SpawnActor<APickupActorBase>(spawnPosition, spawnRotation, spawnParams);
+        APickupActorBase* pickupItem = GetWorld()->SpawnActorDeferred<APickupActorBase>(
+                                                APickupActorBase::StaticClass(), spawnTransform);
         if (IsValid(pickupItem))
         {
             if (fromInventory->decreaseQuantityInSlot(fromSlot, tossQuantity) > 0)
             {
                 pickupItem->SetupItemFromData(itemCopy, tossQuantity);
+                pickupItem->FinishSpawning(spawnTransform);
             }
         }
         
@@ -1505,7 +1481,7 @@ void UInventoryComponent::Server_RequestOtherInventory_Implementation(UInventory
     if (!IsValid(thisActor)) return;
 
     // This should never be invalid because the player is the one calling this function.
-    const APrimaryPlayerCharacter* thisPlayer = Cast<APrimaryPlayerCharacter>(thisActor);
+    const ACharacter* thisPlayer = Cast<ACharacter>(thisActor);
     if (!IsValid(thisPlayer)) return;
     
     if (!IsValid(targetInventory)) targetInventory = this;
@@ -1523,7 +1499,7 @@ void UInventoryComponent::Server_RequestOtherInventory_Implementation(UInventory
 
     // If this cast comes back valid, the owner the player is trying to access is owned
     // by another player. This should NEVER be allowed.
-    const APrimaryPlayerCharacter* playerRef = Cast<APrimaryPlayerCharacter>(ownerActor);
+    const ACharacter* playerRef = Cast<ACharacter>(ownerActor);
     if (IsValid(playerRef))
     {
         const APlayerState* thisPlayerState   = thisPlayer->GetPlayerState();

@@ -1,5 +1,5 @@
 
-#include "CraftData.h"
+#include "lib/CraftData.h"
 
 bool UCraftSystem::isSameCrafter(FStCrafterData craftOne, FStCrafterData craftTwo)
 {
