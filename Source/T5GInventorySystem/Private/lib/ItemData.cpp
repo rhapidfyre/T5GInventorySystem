@@ -3,19 +3,10 @@
 
 UDataTable* UItemSystem::getItemDataTable()
 {
-    const FSoftObjectPath itemTable = FSoftObjectPath(TEXT("/Game/AZ_Assets/DataTables/DT_ItemData.DT_ItemData"));
-    
+    const FSoftObjectPath itemTable = FSoftObjectPath("/T5GInventorySystem/DataTables/DT_ItemData.DT_ItemData");
     UDataTable* dataTable = Cast<UDataTable>(itemTable.ResolveObject());
-    if (dataTable)
-        return dataTable;
-    else
-    {
-        dataTable = Cast<UDataTable>(itemTable.TryLoad());
-        if (dataTable)
-            return dataTable;
-    }
-
-    return nullptr;
+    if (dataTable) return dataTable;
+    return Cast<UDataTable>(itemTable.TryLoad());
 }
 
 FStItemData UItemSystem::getItemDataFromItemName(FName itemName)

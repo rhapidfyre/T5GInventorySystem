@@ -2,6 +2,7 @@
 // ReSharper disable CppUE4CodingStandardNamingViolationWarning
 #include "InventoryComponent.h"
 
+#include "InterchangeResult.h"
 #include "PickupActorBase.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerState.h"
@@ -12,7 +13,8 @@ void UInventoryComponent::BeginPlay()
 {
     if (bShowDebug)
     {
-        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): BeginPlay()"), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): BeginPlay()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
     }
     Super::BeginPlay();
     
@@ -26,6 +28,17 @@ void UInventoryComponent::BeginPlay()
     {
         UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): Play Started. %d Slots and %d Equipment Slots"),
         GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), getNumInventorySlots(), getNumEquipmentSlots());
+    }
+
+    if (!IsValid(UItemSystem::getItemDataTable()))
+    {
+        UE_LOG(LogEngine, Warning, TEXT("%s(%s): Data Table Not Found"),
+            *GetName(), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
+    else
+    {
+        UE_LOG(LogEngine, Display, TEXT("%s(%s): Data Table Was Found"),
+            *GetName(), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
     }
 }
 
