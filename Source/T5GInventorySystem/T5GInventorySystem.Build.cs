@@ -10,14 +10,14 @@ public class T5GInventorySystem : ModuleRules
 		
 		PublicIncludePaths.AddRange(
 			new string[] {
-				// ... add public include paths required here ...
+				//"T5GInventorySystem/Public","T5GInventorySystem/Public/lib",
 			}
 			);
 				
 		
 		PrivateIncludePaths.AddRange(
 			new string[] {
-				// ... add other private include paths required here ...
+				//"T5GInventorySystem/Private","T5GInventorySystem/Private/lib"
 			}
 			);
 			
@@ -26,7 +26,6 @@ public class T5GInventorySystem : ModuleRules
 			new string[]
 			{
 				"Core",
-				// ... add other public dependencies that you statically link with here ...
 			}
 			);
 			
@@ -38,7 +37,6 @@ public class T5GInventorySystem : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-				// ... add private dependencies that you statically link with here ...	
 			}
 			);
 		

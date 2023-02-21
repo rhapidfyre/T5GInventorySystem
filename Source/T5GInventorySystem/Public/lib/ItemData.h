@@ -46,7 +46,7 @@ enum class EItemRarity : uint8
 
 
 USTRUCT(BlueprintType)
-struct FStItemData : public FTableRowBase
+struct T5GINVENTORYSYSTEM_API FStItemData : public FTableRowBase
 {
 	GENERATED_BODY()
 
@@ -104,7 +104,7 @@ struct FStItemData : public FTableRowBase
 };
 
 UCLASS()
-class UItemSystem : public UBlueprintFunctionLibrary
+class T5GINVENTORYSYSTEM_API UItemSystem : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 public:

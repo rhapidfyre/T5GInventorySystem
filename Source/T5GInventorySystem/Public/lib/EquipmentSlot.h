@@ -7,7 +7,7 @@
 #include "EquipmentSlot.generated.h"
 
 USTRUCT(BlueprintType)
-struct FStEquipmentSlot
+struct T5GINVENTORYSYSTEM_API FStEquipmentSlot
 {
 	GENERATED_BODY()
 

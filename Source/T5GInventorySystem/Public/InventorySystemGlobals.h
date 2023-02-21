@@ -5,7 +5,7 @@
 #include "InventorySystemGlobals.generated.h"
 
 UCLASS(Blueprintable)
-class UInventorySystem : public UBlueprintFunctionLibrary
+class T5GINVENTORYSYSTEM_API UInventorySystem : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 

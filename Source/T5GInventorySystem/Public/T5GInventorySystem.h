@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "Modules/ModuleManager.h"
 
-class FT5GInventorySystemModule : public IModuleInterface
+class T5GINVENTORYSYSTEM_API FT5GInventorySystemModule : public IModuleInterface
 {
 public:
 

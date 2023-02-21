@@ -23,7 +23,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInventoryUpdated, int, slotNumbe
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnNotificationAvailable);
 
 UCLASS(BlueprintType, ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
-class UInventoryComponent : public UActorComponent
+class T5GINVENTORYSYSTEM_API UInventoryComponent : public UActorComponent
 {
     GENERATED_BODY()
 	

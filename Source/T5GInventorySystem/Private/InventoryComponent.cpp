@@ -1576,11 +1576,9 @@ void UInventoryComponent::Server_StopUseOtherInventory_Implementation(UInventory
 
 void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> & OutLifetimeProps) const
 {
-    UE_LOG(LogTemp, Display, TEXT("InventoryComponent: GetLifetimeReplicatedProps"));
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
     // Update to owner only. When someone opens something like a storage chest, they'll be set to the owner.
     DOREPLIFETIME_CONDITION(UInventoryComponent, m_inventorySlots, COND_OwnerOnly);
     DOREPLIFETIME_CONDITION(UInventoryComponent, m_equipmentSlots, COND_OwnerOnly);
-    UE_LOG(LogTemp, Display, TEXT("InventoryComponent: GetLifetimeReplicatedProps done"));
 }

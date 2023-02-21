@@ -44,7 +44,7 @@ enum class ECraftingSkill : uint8
 };
 
 USTRUCT(BlueprintType)
-struct FStCraftQuality : public FTableRowBase
+struct T5GINVENTORYSYSTEM_API FStCraftQuality : public FTableRowBase
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -58,7 +58,7 @@ struct FStCraftQuality : public FTableRowBase
 // Contains all data related to an item's data when crafted by a player
 // If the item is NOT crafted, 'itemName' will be None.
 USTRUCT(BlueprintType)
-struct FStCrafterData
+struct T5GINVENTORYSYSTEM_API FStCrafterData
 {
 	GENERATED_USTRUCT_BODY()
 
@@ -73,7 +73,7 @@ struct FStCrafterData
 };
 
 USTRUCT(BlueprintType)
-struct FStCraftRecycleData : public FTableRowBase
+struct T5GINVENTORYSYSTEM_API FStCraftRecycleData : public FTableRowBase
 {
 	GENERATED_USTRUCT_BODY()
 
@@ -88,7 +88,7 @@ struct FStCraftRecycleData : public FTableRowBase
 };
 
 USTRUCT(BlueprintType)
-struct FStCraftingRecipe : public FTableRowBase
+struct T5GINVENTORYSYSTEM_API FStCraftingRecipe : public FTableRowBase
 {
 	GENERATED_USTRUCT_BODY()
 
@@ -104,7 +104,7 @@ struct FStCraftingRecipe : public FTableRowBase
 };
 
 USTRUCT(BlueprintType)
-struct FStCraftingData
+struct T5GINVENTORYSYSTEM_API FStCraftingData
 {
 	GENERATED_USTRUCT_BODY()
 	
@@ -133,7 +133,7 @@ struct FStCraftingData
 
 
 UCLASS()
-class UCraftSystem : public UBlueprintFunctionLibrary
+class T5GINVENTORYSYSTEM_API UCraftSystem : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 public:

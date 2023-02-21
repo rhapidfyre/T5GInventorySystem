@@ -30,7 +30,7 @@ enum class EInventorySlotType : uint8
 };
 
 USTRUCT(BlueprintType)
-struct FStInventoryNotify
+struct T5GINVENTORYSYSTEM_API FStInventoryNotify
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

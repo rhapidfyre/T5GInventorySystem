@@ -8,7 +8,7 @@
 #include "PickupActorBase.generated.h"
 
 UCLASS(BlueprintType)
-class APickupActorBase : public AStaticMeshActor
+class T5GINVENTORYSYSTEM_API APickupActorBase : public AStaticMeshActor
 {
 	GENERATED_BODY()
 public:

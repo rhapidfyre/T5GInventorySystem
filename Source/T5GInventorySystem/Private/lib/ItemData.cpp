@@ -5,7 +5,7 @@ UDataTable* UItemSystem::getItemDataTable()
 {
     const FSoftObjectPath itemTable = FSoftObjectPath("/T5GInventorySystem/DataTables/DT_ItemData.DT_ItemData");
     UDataTable* dataTable = Cast<UDataTable>(itemTable.ResolveObject());
-    if (dataTable) return dataTable;
+    if (IsValid(dataTable)) return dataTable;
     return Cast<UDataTable>(itemTable.TryLoad());
 }
 

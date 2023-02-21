@@ -8,7 +8,7 @@
 #include "InventorySlot.generated.h"
 
 USTRUCT(BlueprintType)
-struct FStInventorySlot
+struct T5GINVENTORYSYSTEM_API FStInventorySlot
 {
 	GENERATED_BODY()
 	
