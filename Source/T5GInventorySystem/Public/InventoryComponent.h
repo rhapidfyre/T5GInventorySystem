@@ -313,7 +313,7 @@ public:	//functions
 	* @param overflowAdd If true, any items that don't stack will be added to the next empty slot.
 	* @param overflowDrop If true, any remaining quantity that does not fit into the inventory will fall to the ground.
 	* @param showNotify If true, add will show a notification. False by default.
-   * @return Slot number the item was added to. Negative value indicates failure.
+   * @return The number of items actually added
 	*/
 	int addItemFromExisting(FStItemData newItem, int quantity,
 	bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
@@ -645,6 +645,9 @@ private: //functions
     */
     void InventoryUpdate(int slotNumber = 0, bool isEquipment = false, bool isAtomic = false);
 
+	UFUNCTION(Client, Unreliable)
+	void Client_InventoryUpdate(int slotNumber = -1, bool isEquipment = false);
+	
     /**
     * Called when the server is reporting that a PLAYER wants to transfer items between
     * two inventories. This is NOT a delegate/event. It should be invoked by the delegate
@@ -696,19 +699,23 @@ public: //variables
 	
 	// If true, "LogTemp" will display basically everything the inventory does.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bVerboseOutput = false;
+	bool bVerboseOutput = true;
 
     UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
         bool bShowNotifications = true;
 
     UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
-        int NumberOfInvSlots = 6;
+	int NumberOfInvSlots = 6;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
-		TArray<EEquipmentSlotType> EligibleEquipmentSlots;
+	TArray<EEquipmentSlotType> EligibleEquipmentSlots;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Initialization")
-		TArray<FStInventorySlot> StartingItems;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
+	TArray<UInputAction*> HotkeyInputs;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
+		TArray<FStStartingItem> StartingItems;
 	
 	// If TRUE, players cannot put items in this inventory, only take from it
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

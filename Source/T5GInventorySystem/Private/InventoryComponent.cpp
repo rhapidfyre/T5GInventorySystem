@@ -49,15 +49,21 @@ UInventoryComponent::UInventoryComponent()
     // It will be updated as needed
     PrimaryComponentTick.bCanEverTick = false;
     SetIsReplicatedByDefault(true);
+	SetAutoActivate(true);
 }
 
 void UInventoryComponent::InitializeInventory()
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): InitializeInventory()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: InitializeInventory"));
     // Ensure the number of inventory slots is valid. If we added an inventory system,
     // it should at least have *one* slot at minimum. Otherwise, wtf is the point?
     if (NumberOfInvSlots < 1) NumberOfInvSlots = 6;
-
+    
     m_inventorySlots.Empty();
     m_equipmentSlots.Empty();
     m_notifications.Empty();
@@ -67,7 +73,16 @@ void UInventoryComponent::InitializeInventory()
     {
         FStInventorySlot newSlot;
         newSlot.slotType = EInventorySlotType::GENERAL;
-        //UE_LOG(LogTemp, Display, TEXT("Adding new inventory slot @ %d"), i);
+
+        // Allow the assignment of hotkeys
+        if (HotkeyInputs.IsValidIndex(i))
+        {
+            if (IsValid(HotkeyInputs[i]))
+            {
+                newSlot.inputAction = HotkeyInputs[i];
+            }
+        }
+
         m_inventorySlots.Add(newSlot);
     }
 
@@ -99,7 +114,8 @@ void UInventoryComponent::InitializeInventory()
             {
                 if (StartingItems.IsValidIndex(0))
                 {
-                    int slotNum         = StartingItems[0].slotNumber;
+                    // Determine the starting item by item name given
+                    int slotNum         = StartingItems[0].startingSlot;
                     bool isEquipSlot    = StartingItems[0].equipType != EEquipmentSlotType::NONE;
                     FName newItemName   = UItemSystem::getItemName(StartingItems[0].itemData);
                     FStItemData newItem = UItemSystem::getItemDataFromItemName(newItemName);
@@ -116,16 +132,17 @@ void UInventoryComponent::InitializeInventory()
                         if (slotNum >= 0)
                         {
                             m_equipmentSlots[slotNum].itemData = newItem;
-                            m_equipmentSlots[slotNum].slotQuantity = StartingItems[0].slotQuantity;
+                            m_equipmentSlots[slotNum].slotQuantity = StartingItems[0].quantity;
                         }
                     }
                     else
                     {
-                        int numItemsFailed = addItemFromExistingToSlot(newItem, slotNum, StartingItems[0].slotQuantity, false, false, false);
-                        if (numItemsFailed > 0)
+                        //int numItemsFailed = addItemFromExistingToSlot(newItem, slotNum, StartingItems[0].slotQuantity, false, false, false);
+                        int itemsAdded = addItemFromExisting(newItem, StartingItems[0].quantity, false, false, false);
+                        if (itemsAdded < 1)
                         {
-                            UE_LOG(LogTemp, Warning, TEXT("%s(%s): %d items failed to add (StartingItem = %s)"),
-                                *GetName(), GetOwner()->HasAuthority()?TEXT("SRV"):TEXT("CLI"), numItemsFailed, *newItemName.ToString());
+                            UE_LOG(LogTemp, Warning, TEXT("%s(%s): Item(s) failed to add (StartingItem = %s)"),
+                                *GetName(), GetOwner()->HasAuthority()?TEXT("SRV"):TEXT("CLI"), *newItemName.ToString());
                         }
                     }
 
@@ -139,17 +156,26 @@ void UInventoryComponent::InitializeInventory()
 
 void UInventoryComponent::OnComponentCreated()
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): OnComponentCreated()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: OnComponentCreated"));
     Super::OnComponentCreated();
     RegisterComponent();
     InitializeInventory();
-	SetAutoActivate(true);
     if (bVerboseOutput) bShowDebug = true;
     m_bIsInventoryReady = true;
 }
 
 FStInventorySlot UInventoryComponent::getInventorySlotData(int slotNumber)
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getInventorySlotData(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
+    }
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getInventorySlotData"));
     if (isValidInventorySlot(slotNumber))
     {
@@ -163,6 +189,11 @@ FStInventorySlot UInventoryComponent::getInventorySlotData(int slotNumber)
 
 FStItemData UInventoryComponent::getItemInSlot(int slotNumber, bool isEquipment)
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getItemInSlot(%d, %s)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber, isEquipment?TEXT("TRUE"):TEXT("FALSE"));
+    }
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getItemInSlot"));
     if (!isEmptySlot(slotNumber, isEquipment))
     {
@@ -188,6 +219,11 @@ FStItemData UInventoryComponent::getItemInSlot(int slotNumber, bool isEquipment)
 
 EInventorySlotType UInventoryComponent::getInventorySlotType(int slotNumber)
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getInventorySlotType(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
+    }
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getInventorySlotType"));
     if (isValidInventorySlot(slotNumber))
         return m_inventorySlots[slotNumber].slotType;
@@ -196,7 +232,11 @@ EInventorySlotType UInventoryComponent::getInventorySlotType(int slotNumber)
 
 EEquipmentSlotType UInventoryComponent::getEquipmentSlotType(int slotNumber)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getEquipmentSlotType"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getEquipmentSlotType(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
+    }
     if (isValidEquipmentSlot(slotNumber))
         return m_equipmentSlots[slotNumber].equipType;
     return EEquipmentSlotType::NONE;
@@ -204,6 +244,11 @@ EEquipmentSlotType UInventoryComponent::getEquipmentSlotType(int slotNumber)
 
 int UInventoryComponent::getTotalQuantityInAllSlots(FName itemName)
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getTotalQuantityInAllSlots(%s)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), *itemName.ToString());
+    }
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: GetTotalQuantityInAllSlots"));
     int total = 0;
     for (int i = 0; i < getNumInventorySlots(); i++)
@@ -219,6 +264,11 @@ int UInventoryComponent::getTotalQuantityInAllSlots(FName itemName)
 
 int UInventoryComponent::getFirstEmptySlot()
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getFirstEmptySlot()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getFirstEmptySlot"));
     for (int i = 0; i < getNumInventorySlots(); i++)
     {
@@ -230,7 +280,11 @@ int UInventoryComponent::getFirstEmptySlot()
 
 float UInventoryComponent::getTotalWeight(bool incEquip)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getTotalWeight"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getTotalWeight()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     float totalWeight = 0.0f;
     for (int i = 0; i < getNumInventorySlots(); i++)
     {
@@ -244,7 +298,11 @@ float UInventoryComponent::getTotalWeight(bool incEquip)
 
 float UInventoryComponent::getWeightInSlot(int slotNumber)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getWeightInSlot"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getWeightInSlot(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
+    }
     const FStItemData itemData = getItemInSlot(slotNumber);
     if (UItemSystem::getItemDataIsValid(itemData))
     {
@@ -256,7 +314,11 @@ float UInventoryComponent::getWeightInSlot(int slotNumber)
 
 TArray<int> UInventoryComponent::getSlotsContainingItem(FName itemName)
 {   
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getSlotsContainingItem"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getSlotsContainingItem(%s)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), *itemName.ToString());
+    }
     TArray<int> foundSlots = TArray<int>();
     for (int i = 0; i < getNumInventorySlots(); i++)
     {
@@ -274,7 +336,11 @@ TArray<int> UInventoryComponent::getSlotsContainingItem(FName itemName)
 
 FStInventorySlot UInventoryComponent::getInventorySlot(int slotNumber)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getInventorySlot"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getInventorySlot(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
+    }
     if (isValidInventorySlot(slotNumber))
         return m_inventorySlots[slotNumber];
     return FStInventorySlot();
@@ -282,7 +348,11 @@ FStInventorySlot UInventoryComponent::getInventorySlot(int slotNumber)
 
 int UInventoryComponent::getEquipmentSlotNumber(EEquipmentSlotType equipEnum)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getEquipmentSlotNumber(enum)"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getEquipmentSlotNumber(%s)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), *UEnum::GetValueAsString(equipEnum));
+    }
     // Makes sure incoming param is a valid equip slot
     if (equipEnum != EEquipmentSlotType::NONE)
     {
@@ -301,13 +371,18 @@ int UInventoryComponent::getEquipmentSlotNumber(EEquipmentSlotType equipEnum)
 
 FStInventorySlot UInventoryComponent::getEquipmentSlot(EEquipmentSlotType equipEnum)
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getEquipmentSlot(%s)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), *UEnum::GetValueAsString(equipEnum));
+    }
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getEquipmentSlot(enum)"));
     if (equipEnum != EEquipmentSlotType::NONE)
     {
         for (int i = 0; i < m_equipmentSlots.Num(); i++)
         {
             const FStInventorySlot equipSlot = getEquipmentSlot(i);
-            if (equipSlot.equipType != EEquipmentSlotType::NONE)
+            if (equipSlot.equipType == equipEnum)
             {
                 return equipSlot; // Returns a copy of the equipment slot
             }
@@ -318,7 +393,11 @@ FStInventorySlot UInventoryComponent::getEquipmentSlot(EEquipmentSlotType equipE
 
 FStInventorySlot UInventoryComponent::getEquipmentSlot(int slotNumber)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getEquipmentSlot(slot)"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getEquipmentSlot(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
+    }
     // If the slot is valid, returns a copy of the requested slot
     if (isValidEquipmentSlot(slotNumber))
         return m_equipmentSlots[slotNumber];
@@ -327,12 +406,20 @@ FStInventorySlot UInventoryComponent::getEquipmentSlot(int slotNumber)
 
 bool UInventoryComponent::isValidInventorySlot(int slotNumber)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: isValidInventorySlot(%d)"), slotNumber);
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): isValidInventorySlot(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
+    }
     return (m_inventorySlots.IsValidIndex(slotNumber));
 }
 bool UInventoryComponent::isValidEquipmentSlot(int slotNumber)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: isValidEquipmentSlot(%d)"), slotNumber);
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): isValidEquipmentSlot(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
+    }
     return (m_equipmentSlots.IsValidIndex(slotNumber));
 }
 bool UInventoryComponent::isValidEquipmentSlotEnum(EEquipmentSlotType equipSlot)
@@ -351,13 +438,21 @@ bool UInventoryComponent::isValidEquipmentSlotEnum(EEquipmentSlotType equipSlot)
 
 bool UInventoryComponent::isEmptySlot(int slotNumber, bool isEquipment)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: isEmptySlot"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): isEmptySlot(%d, %s)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber, isEquipment?TEXT("TRUE"):TEXT("FALSE"));
+    }
     return (getQuantityInSlot(slotNumber, isEquipment) < 1);
 }
 
 bool UInventoryComponent::isEquipmentSlotEmpty(EEquipmentSlotType equipSlot)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: isEquipmentSlotEmpty"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getFirstEmptySlot(%s)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), *UEnum::GetValueAsString(equipSlot));
+    }
     const int slotNum = getEquipmentSlotNumber(equipSlot);
     if (slotNum >= 0)
     {
@@ -369,14 +464,22 @@ bool UInventoryComponent::isEquipmentSlotEmpty(EEquipmentSlotType equipSlot)
 
 FName UInventoryComponent::getItemNameInSlot(int slotNumber, bool isEquipment)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getItemNameInSlot"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getItemNameInSlot(%d, %s)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber, isEquipment?TEXT("TRUE"):TEXT("FALSE"));
+    }
     const FStItemData itemData = getItemInSlot(slotNumber, isEquipment);
     return UItemSystem::getItemName(itemData);
 }
 
 int UInventoryComponent::getQuantityInSlot(int slotNumber, bool isEquipment)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: getQuantityInSlot"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getQuantityInSlot(%d, %s)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber, isEquipment?TEXT("TRUE"):TEXT("FALSE"));
+    }
     if (isEquipment)
     {
         if (m_equipmentSlots.IsValidIndex(slotNumber))
@@ -393,7 +496,11 @@ int UInventoryComponent::getQuantityInSlot(int slotNumber, bool isEquipment)
 int UInventoryComponent::addItemByName(
     FName itemName, int quantity, bool overflowAdd, bool overflowDrop, bool showNotify)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: addItemByName"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): addItemByName(%s)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), *itemName.ToString());
+    }
     if (isInventoryReady() && UItemSystem::getItemNameIsValid(itemName))
     {
         // Adds the item to the first applicable slot. If the add fills the slot, it will only add what it can fit.
@@ -405,7 +512,11 @@ int UInventoryComponent::addItemByName(
 int UInventoryComponent::addItemByNameToSlot(
     FName itemName, int slotNumber, int quantity, bool overflowAdd, bool overflowDrop, bool showNotify)
 {
-    UE_LOG(LogTemp, Display, TEXT("InventoryComponent: addItemByNameToSlot"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): addItemByNameToSlot(%s, %d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), *itemName.ToString(), slotNumber);
+    }
     if (!isValidInventorySlot(slotNumber)) slotNumber = -1;
     if (quantity < 1) quantity = 1;
     if ( itemName != UItemSystem::getInvalidName() )
@@ -465,7 +576,7 @@ int UInventoryComponent::addItemFromExistingWithRemainder(UInventoryComponent* f
 int UInventoryComponent::addItemFromExisting(FStItemData newItem, int quantity, bool overflowAdd, bool overflowDrop, bool showNotify)
 {
     UE_LOG(LogTemp, Display, TEXT("InventoryComponent: addItemFromExisting (overload)"));
-    if (UItemSystem::getItemDataIsValid(newItem)) return false;
+    if (!UItemSystem::getItemDataIsValid(newItem)) return false;
     int remainder;
     return addItemFinalWithRemainder(newItem, -1, quantity, remainder, overflowDrop, showNotify);
 }
@@ -510,7 +621,11 @@ int UInventoryComponent::addItemFromExistingToSlotWithRemainder(UInventoryCompon
 
 int UInventoryComponent::addItemFinal(FStItemData newItem, int toSlot, int quantity, bool overflowAdd, bool overflowDrop, bool showNotify)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: addItemFinal"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): addItemFinal()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     int remainder;
     return addItemFinalWithRemainder(newItem, toSlot, quantity, remainder, overflowAdd, overflowDrop, showNotify);
 }
@@ -518,7 +633,11 @@ int UInventoryComponent::addItemFinal(FStItemData newItem, int toSlot, int quant
 
 int UInventoryComponent::addItemFinalWithRemainder(FStItemData newItem, int toSlot, int quantity, int& remainder, bool overflowAdd, bool overflowDrop, bool showNotify)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: addItemFinalWithRemainder"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): addItemFinalWithRemainder()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     if (quantity < 1) quantity = 1;
     int remainingItems = quantity;
     bool encounteredError;
@@ -566,7 +685,11 @@ int UInventoryComponent::addItemFinalWithRemainder(FStItemData newItem, int toSl
 
 bool UInventoryComponent::donEquipment(UInventoryComponent* fromInventory, int fromSlot, EEquipmentSlotType eSlot)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: donEquipment"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): donEquipment()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     if (!IsValid(fromInventory)) fromInventory = this;
     
     // Per UE coding convention, "IsValid" should be used when possible over "nullptr" check.
@@ -614,7 +737,11 @@ bool UInventoryComponent::donEquipment(UInventoryComponent* fromInventory, int f
 
 bool UInventoryComponent::doffEquipment(EEquipmentSlotType equipSlot, int slotNumber, UInventoryComponent* toInventory, bool destroyResult)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: doffEquipment"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): doffEquipment()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     // If destination inventory not provided, use this inventory
     if (!IsValid(toInventory)) toInventory = this;
     if (toInventory->isInventoryReady())
@@ -643,7 +770,11 @@ bool UInventoryComponent::doffEquipment(EEquipmentSlotType equipSlot, int slotNu
 
 int UInventoryComponent::removeItemFromSlot(int slotNumber, int quantity, bool isEquipment, bool showNotify, bool dropToGround, bool removeAll)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: removeItemFromSlot"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): removeItemFromSlot(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
+    }
     if (quantity < 1) quantity = 1;
     if (isInventoryReady())
     {
@@ -706,7 +837,11 @@ int UInventoryComponent::removeItemFromSlot(int slotNumber, int quantity, bool i
 
 int UInventoryComponent::removeItemByQuantity(FName itemName, int quantity, bool dropToGround, bool removeAll)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: removeItemByQuantity"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): removeItemByQuantity(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), quantity);
+    }
     if (quantity < 1) quantity = 1;
     if (isInventoryReady() && itemName != UItemSystem::getInvalidName())
     {
@@ -731,7 +866,11 @@ int UInventoryComponent::removeItemByQuantity(FName itemName, int quantity, bool
 
 bool UInventoryComponent::swapOrStackSlots(UInventoryComponent* fromInventory, int fromSlotNum, int toSlotNum, int quantity, bool showNotify, bool isEquipmentSlot, bool fromEquipmentSlot)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: swapOrStackSlots"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): swapOrStackSlots()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     int remainder;
     return swapOrStackWithRemainder(fromInventory, fromSlotNum, toSlotNum, quantity, remainder, showNotify, isEquipmentSlot, fromEquipmentSlot);
 }
@@ -740,7 +879,11 @@ bool UInventoryComponent::swapOrStackSlots(UInventoryComponent* fromInventory, i
 bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInventory, int fromSlotNum,
     int toSlotNum, int quantity, int& remainder, bool showNotify, bool isEquipmentSlot, bool fromEquipmentSlot)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: swapOrStackWithRemainder"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): swapOrStackWithRemainder()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     
     // If the 'fromInventory' is invalid, we're transferring an item within this same inventory;
     if (!IsValid(fromInventory)) fromInventory = this;
@@ -875,29 +1018,49 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
 
 void UInventoryComponent::OnRep_InventorySlotUpdated()
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): OnRep_InventorySlotUpdated()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     FString ownerName = "NULL";
     if (IsValid(GetOwner()->GetOwner()))
         ownerName = GetOwner()->GetOwner()->GetName();
-    UE_LOG(LogTemp, Display, TEXT("%s(%s) OnRep_InventorySlotUpdated() Called (Owned by %s)"),
-        *GetName(), IsValid(GetOwner())?GetOwner()->HasAuthority()?TEXT("SRV"):TEXT("CLI"):TEXT("NIL"), *ownerName
-    );
+    
+    if (bVerboseOutput)
+    {
+        UE_LOG(LogTemp, Display, TEXT("%s(%s): OnInventoryUpdated.Broadcast(-1, false)"),
+            *GetName(), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     OnInventoryUpdated.Broadcast(-1, false);
 }
 
 void UInventoryComponent::OnRep_EquipmentSlotUpdated()
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): OnRep_EquipmentSlotUpdated()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     FString ownerName = "NULL";
     if (IsValid(GetOwner()->GetOwner()))
         ownerName = GetOwner()->GetOwner()->GetName();
-    UE_LOG(LogTemp, Display, TEXT("%s(%s) OnRep_EquipmentSlotUpdated() Called (Owned by %s)"),
-        *GetName(), IsValid(GetOwner())?GetOwner()->HasAuthority()?TEXT("SRV"):TEXT("CLI"):TEXT("NIL"), *ownerName
-    );
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("%s(%s): OnInventoryUpdated.Broadcast(-1, true)"),
+            *GetName(), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     OnInventoryUpdated.Broadcast(-1, true);
 }
 
 bool UInventoryComponent::splitStack(
     UInventoryComponent* fromInventory, int fromSlotNum, int splitQuantity, int toSlotNum, bool showNotify)
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): splitStack()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: splitStack"));
     if (splitQuantity < 1) splitQuantity = 1;
     if (fromInventory == nullptr) fromInventory = this;
@@ -953,7 +1116,11 @@ bool UInventoryComponent::splitStack(
 
 int UInventoryComponent::addItem(FName itemName, int quantity, bool showNotify, int& slotNumber)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: addItem"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): addItem()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     if (quantity < 1) quantity = 1;
     const FStItemData newItem = UItemSystem::getItemDataFromItemName(itemName);
     return addItem(newItem, quantity, false, slotNumber);
@@ -961,7 +1128,11 @@ int UInventoryComponent::addItem(FName itemName, int quantity, bool showNotify, 
 
 int UInventoryComponent::addItem(FStItemData newItem, int quantity, bool showNotify, int& slotNumber)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: addItem(overload)"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): addItem(overload)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     if (quantity < 1) quantity = 1;
     // Create a new object that is a copy of the item being referenced
     // A negative slot number means to add it to the first available slot.
@@ -1052,14 +1223,22 @@ int UInventoryComponent::addItem(FStItemData newItem, int quantity, bool showNot
 
 int UInventoryComponent::increaseQuantityInSlot(int slotNumber, int quantity, bool showNotify)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: increaseQuantityInSlot"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): increaseQuantityInSlot()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     int newQty;
     return increaseQuantityInSlot(slotNumber, quantity, newQty, showNotify);
 }
 
 int UInventoryComponent::increaseQuantityInSlot(int slotNumber, int quantity, int& newQuantity, bool showNotify)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: increaseQuantityInSlot (overload)"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): increaseQuantityInSlot(overload)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     if (quantity < 1) quantity = 1;
     const FStItemData slotItem = getItemInSlot(slotNumber);
     if (UItemSystem::getItemDataIsValid(slotItem))
@@ -1082,7 +1261,11 @@ int UInventoryComponent::increaseQuantityInSlot(int slotNumber, int quantity, in
 
 int UInventoryComponent::decreaseQuantityInSlot(int slotNumber, int quantity, int& remainder, bool isEquipment, bool showNotify)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: decreaseQuantityInSlot (overload)"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): decreaseQuantityInSlot(overload)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     if (quantity < 1) quantity = 1;
     const FStItemData slotItem = getItemInSlot(slotNumber);
     if (UItemSystem::getItemDataIsValid(slotItem))
@@ -1125,49 +1308,108 @@ int UInventoryComponent::decreaseQuantityInSlot(int slotNumber, int quantity, in
 
 int UInventoryComponent::decreaseQuantityInSlot(int slotNumber, int quantity, bool isEquipment, bool showNotify)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: decreaseQuantityInSlot"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): decreaseQuantityInSlot()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     int remainder;
     return decreaseQuantityInSlot(slotNumber, quantity, remainder, isEquipment, showNotify);
 }
 
 TArray<FStInventoryNotify> UInventoryComponent::getNotifications()
 {
-    TArray<FStInventoryNotify> invNotify = m_notifications;
-    m_notifications.Empty();
+    TArray<FStInventoryNotify> invNotify;
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): getNotifications()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
+    if (!m_notifications.IsEmpty())
+    {
+        invNotify = m_notifications;
+        m_notifications.Empty();
+        return invNotify;
+    }
     return invNotify;
 }
 
 void UInventoryComponent::sendNotification_Implementation(FName itemName, int quantity, bool wasAdded)
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): sendNotification_Implementation()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     if (quantity <= 0) return;
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: sendNotification_Implementation"));
     FStInventoryNotify invNotify;
     invNotify.itemName = itemName;
     invNotify.itemQuantity = (wasAdded ? abs(quantity) : abs(quantity) * (-1));
     UE_LOG(LogTemp, Display, TEXT("A new inventory notification is available"));
     m_notifications.Add(invNotify);
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("%s(%s): OnNotificationAvailable.Broadcast()"),
+            *GetName(), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     OnNotificationAvailable.Broadcast();
 }
 
 void UInventoryComponent::resetInventorySlot(int slotNumber)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: resetInventorySlot"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): resetInventorySlot(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
+    }
     removeItemFromSlot(slotNumber, 1, false,true);
     InventoryUpdate(slotNumber);
 }
 
 void UInventoryComponent::InventoryUpdate(int slotNumber, bool isEquipment, bool isAtomic)
 {
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): InventoryUpdate(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
+    }
     // Notify delegate so bound functions can trigger
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("%s(%s): OnInventoryUpdated.Broadcast(%d, %s)"),
+            *GetName(), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
+            slotNumber, isEquipment?TEXT("TRUE"):TEXT("FALSE"));
+    }
+
+    // Fire server delegates
+    if (isAtomic)
+        OnInventoryUpdated.Broadcast(-1, isEquipment);
+    else
+        OnInventoryUpdated.Broadcast(slotNumber, isEquipment);
+
+    // Trigger client delegates
+    Client_InventoryUpdate(isAtomic ? -1 : slotNumber, isEquipment);
+}
+
+void UInventoryComponent::Client_InventoryUpdate_Implementation(int slotNumber, bool isEquipment)
+{
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): Client_InventoryUpdate_Implementation()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     OnInventoryUpdated.Broadcast(slotNumber, isEquipment);
-    
 }
 
 bool UInventoryComponent::transferItemBetweenSlots(
     UInventoryComponent* fromInventory, UInventoryComponent* toInventory,
     int fromSlotNum, int toSlotNum, int moveQuantity, bool overflowDrop, bool isFromEquipSlot, bool isToEquipSlot)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: transferItemBetweenSlots"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): transferItemBetweenSlots()"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
+    }
     if (moveQuantity < 1) moveQuantity = 1;
     if (!IsValid(fromInventory)) fromInventory = this;
     if (!IsValid(toInventory)) toInventory = this;
@@ -1221,7 +1463,11 @@ bool UInventoryComponent::transferItemBetweenSlots(
 
 bool UInventoryComponent::activateItemInSlot(int slotNumber)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: activateItemInSlot"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): activateItemInSlot(%d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
+    }
     if (isValidInventorySlot(slotNumber))
     {
         if (decreaseQuantityInSlot(slotNumber,1,true) > 0)
@@ -1236,7 +1482,11 @@ bool UInventoryComponent::activateItemInSlot(int slotNumber)
 
 bool UInventoryComponent::setNotifyItem(FStItemData itemData, int quantityAffected)
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: setNotifyItem"));
+    if (bShowDebug)
+    {
+        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): setNotifyItem(%s, %d)"),
+            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), *itemData.properName.ToString(), quantityAffected);
+    }
     if (UItemSystem::getItemDataIsValid(itemData))
     {
         sendNotification(UItemSystem::getItemName(itemData), quantityAffected, quantityAffected > 0);

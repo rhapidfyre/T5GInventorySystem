@@ -83,13 +83,13 @@ struct T5GINVENTORYSYSTEM_API FStItemData : public FTableRowBase
 	float itemWeight = 0.01f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UTexture2D* itemThumbnail = UTexture2D::CreateTransient(32,32);
+	UTexture2D* itemThumbnail = nullptr; //UTexture2D::CreateTransient(32,32);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UStaticMesh* staticMesh = NewObject<UStaticMesh>();
+	UStaticMesh* staticMesh = nullptr; //NewObject<UStaticMesh>();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	USkeletalMesh* skeletalMesh = NewObject<USkeletalMesh>();
+	USkeletalMesh* skeletalMesh = nullptr; //NewObject<USkeletalMesh>();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FTransform originAdjust;
@@ -112,7 +112,7 @@ public:
 	// Gets the current default name for an invalid item.
 	// This should be used instead of accessing the name directly to avoid deprecation issues
     UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-        static FName getInvalidName() { return "None"; }
+        static FName getInvalidName() { return "None"; } 
 
 	// Alternative accessor to getInvalidName().
     UFUNCTION(BlueprintPure, Category = "Item Data System Globals")

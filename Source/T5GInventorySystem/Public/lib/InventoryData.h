@@ -37,7 +37,7 @@ struct T5GINVENTORYSYSTEM_API FStInventoryNotify
 	FName itemName = "None";
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float itemQuantity = 0;
+	int itemQuantity = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool wasAdded = true;
