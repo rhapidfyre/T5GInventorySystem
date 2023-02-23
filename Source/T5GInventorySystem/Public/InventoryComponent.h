@@ -673,9 +673,11 @@ private: //functions
     * executed from the inventory of the player who activated the item.
     *
     * @param slotNumber The number of the inventory slot containing the item to be activated
+    * @param isEquipment True if this is an equipment slot. False by default.
     * @return True if the item was successfully activated
     */
-    bool activateItemInSlot(int slotNumber);
+	UFUNCTION(BlueprintCallable)
+    bool activateItemInSlot(int slotNumber, bool isEquipment = false);
 
     /**
      * Adds the item to the notification TMap, notifying the player about a modification to their inventory.
@@ -699,7 +701,7 @@ public: //variables
 	
 	// If true, "LogTemp" will display basically everything the inventory does.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bVerboseOutput = true;
+	bool bVerboseOutput = false;
 
     UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
         bool bShowNotifications = true;

@@ -987,13 +987,15 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
     bool isSameItem = UItemSystem::isSameItemData(fromItem, toItem); 
     if (isSameItem || !UItemSystem::getItemDataIsValid(toItem))
     {
+        if (isEquipmentSlot)
+        {
+            EEquipmentSlotType eSlot = getEquipmentSlotType(toSlotNum);
+            return donEquipment(this, fromSlotNum, eSlot);
+        }
         if (fromInventory->decreaseQuantityInSlot(fromSlotNum, moveQuantity, showNotify) > 0)
         {
             int newSlot = addItemFromExistingToSlot(fromItem, toSlotNum, moveQuantity, true, false, showNotify);
-            if (newSlot < 0)
-            {
-                return false;
-            }
+            if (newSlot < 0) return false;
             return true;
         }
     }
@@ -1461,7 +1463,7 @@ bool UInventoryComponent::transferItemBetweenSlots(
     return false;
 }
 
-bool UInventoryComponent::activateItemInSlot(int slotNumber)
+bool UInventoryComponent::activateItemInSlot(int slotNumber, bool isEquipment)
 {
     if (bShowDebug)
     {
@@ -1470,11 +1472,34 @@ bool UInventoryComponent::activateItemInSlot(int slotNumber)
     }
     if (isValidInventorySlot(slotNumber))
     {
-        if (decreaseQuantityInSlot(slotNumber,1,true) > 0)
+
+        FStItemData itemInSlot = getItemInSlot(slotNumber, isEquipment);
+        if (UItemSystem::getItemDataIsValid(itemInSlot))
         {
-            //$fin - Spawn a UActor and activate the item
-            //       Should spawn owned by *this* inventory's owner.
-            return true;
+            if (itemInSlot.itemActivation == EItemActivation::EQUIP)
+            {
+                int destinationSlot = -1;
+                for ( const EEquipmentSlotType slotType : itemInSlot.equipSlots )
+                {
+                    const int eSlotNum = getEquipmentSlotNumber(slotType);
+                    if (isValidEquipmentSlot(eSlotNum))
+                    {
+                        destinationSlot = eSlotNum;
+                        break;
+                    }
+                }
+                swapOrStackSlots(this,slotNumber, destinationSlot, 1,
+                false, !isEquipment, isEquipment);
+            }
+            else
+            {
+                if (decreaseQuantityInSlot(slotNumber,1,isEquipment) > 0)
+                {
+                    //TODO - Spawn a UActor and activate the item
+                    //       Should spawn owned by *this* inventory's owner.
+                    return true;
+                }
+            }
         }
     }
     return false;
