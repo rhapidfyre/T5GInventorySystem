@@ -531,7 +531,8 @@ int UInventoryComponent::addItemByNameToSlot(
             const int itemsAdded = addItem(itemName, remainingItems, showNotify, slotNumber);
             remainingItems -= itemsAdded;
 
-            if (showNotify) sendNotification(itemName, itemsAdded, true);
+            // I believe this is handled inside `addItem`
+            //if (showNotify) sendNotification(itemName, itemsAdded, true);
                 
             // Negative return indicates failure to add (full inventory, etc)
             encounteredError = (itemsAdded < 0); // Stop the loop
@@ -1125,7 +1126,8 @@ int UInventoryComponent::addItem(FName itemName, int quantity, bool showNotify, 
     }
     if (quantity < 1) quantity = 1;
     const FStItemData newItem = UItemSystem::getItemDataFromItemName(itemName);
-    return addItem(newItem, quantity, false, slotNumber);
+    const int itemsAdded = addItem(newItem, quantity, showNotify, slotNumber); 
+    return itemsAdded;
 }
 
 int UInventoryComponent::addItem(FStItemData newItem, int quantity, bool showNotify, int& slotNumber)
@@ -1175,8 +1177,9 @@ int UInventoryComponent::addItem(FStItemData newItem, int quantity, bool showNot
     }
 
     // Setup our addition quantity
-    int maxQuantity = UItemSystem::getItemMaxStackSize(newItem);
-    int newQuantity = getQuantityInSlot(slotNumber) + abs(quantity);
+    const int maxQuantity = UItemSystem::getItemMaxStackSize(newItem);
+    const int oldQuantity = getQuantityInSlot(slotNumber);
+    int newQuantity = oldQuantity + abs(quantity);
 
     // If an item exists at the destination slot, we will try to add to it.
     FStItemData existingItem = getItemInSlot(slotNumber);
@@ -1211,15 +1214,16 @@ int UInventoryComponent::addItem(FStItemData newItem, int quantity, bool showNot
     // We are go for the addition
     int addQuantity = newQuantity > maxQuantity ? maxQuantity : newQuantity;
     m_inventorySlots[slotNumber].slotQuantity = addQuantity;
+    const int itemsAdded = addQuantity - oldQuantity;
     if (!UItemSystem::getItemDataIsValid(existingItem))
         m_inventorySlots[slotNumber].itemData = newItem;
     if (showNotify)
     {
-        sendNotification(UItemSystem::getItemName(newItem), addQuantity, true);
+        sendNotification(UItemSystem::getItemName(newItem), itemsAdded, true);
     }
     
     InventoryUpdate(slotNumber);
-    return addQuantity;
+    return itemsAdded;
     
 }
 

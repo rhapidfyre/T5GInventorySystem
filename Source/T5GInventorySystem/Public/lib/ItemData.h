@@ -17,12 +17,12 @@
 UENUM(BlueprintType)
 enum class EItemActivation : uint8
 {
-	NONE UMETA(DisplayName = "Does Not Activate"),
-	EQUIP UMETA(DisplayName = "Equippable", Description = "Equips when Activated"),
-	EAT UMETA(DisplayName = "Edible", Description = "Item is eaten or otherwise consumed"),
-	DRINK UMETA(DisplayName = "Drinkable", Description = "Item is consumed by drinking"),
-	PLACE UMETA(DisplayName = "Placeable", Description = "Item activated the placement system when activated"),
-	MISC UMETA(DisplayName = "Activated", Description = "An item that performs an action when activated")
+	NONE	UMETA(DisplayName = "Does Not Activate"),
+	EQUIP	UMETA(DisplayName = "Equippable",	Description = "Equips when Activated"),
+	EAT		UMETA(DisplayName = "Edible",		Description = "Item is eaten or otherwise consumed"),
+	DRINK	UMETA(DisplayName = "Drinkable",	Description = "Item is consumed by drinking"),
+	PLACE	UMETA(DisplayName = "Placeable",	Description = "Item activated the placement system when activated"),
+	MISC	UMETA(DisplayName = "Activated",	Description = "An item that performs an action when activated")
 };
 
 UENUM(BlueprintType)
