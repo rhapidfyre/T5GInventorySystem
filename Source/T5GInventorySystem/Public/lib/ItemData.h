@@ -51,10 +51,10 @@ struct T5GINVENTORYSYSTEM_API FStItemData : public FTableRowBase
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FName properName = "None";
+	FName properName = FName();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FText displayName = FText::FromString("None");
+	FText displayName = FText::FromName(FName());
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite);
 	FString itemDetails = "Invalid Template Item";
@@ -112,11 +112,11 @@ public:
 	// Gets the current default name for an invalid item.
 	// This should be used instead of accessing the name directly to avoid deprecation issues
     UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-        static FName getInvalidName() { return "None"; } 
+        static FName getInvalidName() { return FName(); } 
 
 	// Alternative accessor to getInvalidName().
     UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static FText getInvalidText() { return FText::FromName("None");}
+		static FText getInvalidText() { return FText::FromName(FName());}
 
 	// Preferred accessor, in case the variable name is ever changed.
 	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")

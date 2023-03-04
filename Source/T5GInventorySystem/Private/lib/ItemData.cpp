@@ -49,7 +49,7 @@ bool UItemSystem::getItemNameIsValid(FName itemName, bool performLookup)
 
 bool UItemSystem::getItemDataIsValid(FStItemData itemData)
 {
-    return getItemNameIsValid(itemData.properName, false);
+    return getItemNameIsValid(getItemName(itemData), false);
 }
 
 int UItemSystem::getMaximumStackSize(FName itemName)
