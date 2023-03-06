@@ -459,12 +459,13 @@ public:	//functions
     *
     * @param itemName The name of the item we are wanting to remove from the inventory
     * @param quantity How many to remove. Defaults to 1. If amount exceeds quantity, will set removeAll to true.
+    * @param isEquipment True if this is an equipment slot. False by default.
     * @param dropToGround If true, spawns a pickup for the item removed at the total quantity removed.
     * @param removeAll If true, removes ALL occurrence of the item in the entire inventory.
     * @return The total number of items successfully removed. Negative indicates failure.
     */
     UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
-        int removeItemByQuantity(FName itemName, int quantity = 1, bool dropToGround = false, bool removeAll = false);
+        int removeItemByQuantity(FName itemName, int quantity = 1, bool isEquipment = false, bool dropToGround = false, bool removeAll = false);
 
 	/**
 	* Removes a quantity of the item in the requested inventory slot. Verifications should

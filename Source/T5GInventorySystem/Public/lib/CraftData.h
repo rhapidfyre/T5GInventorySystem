@@ -14,44 +14,17 @@
 
 #include "CraftData.generated.h"
 
-
 UENUM(BlueprintType)
-enum class ECraftingQuality : uint8
+enum class ECraftingType : uint8
 {
-	DENSITY UMETA(DisplayName = "Density", Description = "Weight of the Item. A High quality of density means the item will weigh less"),
-	GRIP    UMETA(DisplayName = "Grip", Description = "A high quality of grip makes the weapon easier to grip, reducing time between attacks"),
-	SIGHTS  UMETA(DisplayName = "Sights", Description = "A high sight quality makes weapons easier to aim, making ranged weapon damage closer to it's true value"),
-	BALANCE UMETA(DisplayName = "Balance", Description = "A high balance quality makes weapons easier to handle, making melee weapon damage closer to it's true value"),
-	DURABILITY UMETA(DisplayName = "Durability", Description = "A high durability means the item will degrade slower, getting more use out of the item")
-};
-
-UENUM(BlueprintType)
-enum class ECraftingSkill : uint8
-{
-	GENERAL		UMETA(DisplayName = "Generic", Description = "Trivial crafting such as campfires and bandages"),
-	SHIPWRIGHT	UMETA(DisplayName = "Shipwright", Description = "Crafting starships and starship parts"),
-	GUNSMITH	UMETA(DisplayName = "Gunsmithing", Description = "Weapons and gunparts in relation to combine, blast or percussive weapons"),
-	ORDNANCE	UMETA(DisplayName = "Ordnance", Description = "Weapons and Devices that utilize explosives, such as grenades and breaching charges"),
-	COOKING		UMETA(DisplayName = "Cooking", Description = "Grilling, baking, cooking, frying - Crafting food and edible items"),
-	BREWING		UMETA(DisplayName = "Brewing", Description = "Creating drinks, such as beer, tea, coffee and cocktails"),
-	ENGINEER	UMETA(DisplayName = "Engineering", Description = "Vehicles and their parts, such as land speeders and hovercrafts"),
-	BLACKSMITH	UMETA(DisplayName = "Blacksmithing", Description = "Weapons and parts in relation to martial weapons, such as swords and daggers"),
-	ENERGETICS	UMETA(DisplayName = "Energetics", Description = "Combining the galactic energies with items to create energized materials"),
-	EXTRICATION	UMETA(DisplayName = "Extrication", Description = "The act of extracting valuable minerals from raw materials"),
-	ARCHITECT	UMETA(DisplayName = "Architecture", Description = "Crafting buildings, houses, grand halls and more for housing needs"),
-	TAILOR		UMETA(DisplayName = "Tailoring", Description = "Crafting cosmetic items, such as entertainer outfits, capes and everyday wear"),
-	ARMORER		UMETA(DisplayName = "Armoring", Description = "Crafting equipment used to protect the wearer")
-};
-
-USTRUCT(BlueprintType)
-struct T5GINVENTORYSYSTEM_API FStCraftQuality : public FTableRowBase
-{
-	GENERATED_BODY()
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FName qualityName = "Durability";
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float qualityValue = 0.5;
+	NONE		UMETA(DisplayName = "No Crafting"),
+	PLAYER		UMETA(DisplayName = "Player Inventory"),
+	CAMPFIRE	UMETA(DisplayName = "Campfire"),
+	FORGE		UMETA(DisplayName = "Forge"),
+	GRILLE		UMETA(DisplayName = "Grill / Stove"),
+	LOOM		UMETA(DisplayName = "Loom / Tailoring"),
+	ANVIL		UMETA(DisplayName = "Blacksmith Anvil"),
+	WORKBENCH	UMETA(DisplayName = "Workbench"),
 };
 
 // FCrafterData
@@ -63,13 +36,10 @@ struct T5GINVENTORYSYSTEM_API FStCrafterData
 	GENERATED_USTRUCT_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FText itemName = FText::FromString("None");
+	FText itemName		= FText::FromString("None");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FText crafterName = FText::FromString("None");
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TArray<FStCraftQuality> itemQuality;
+	FText crafterName	= FText::FromString("None");
 };
 
 USTRUCT(BlueprintType)
@@ -92,43 +62,33 @@ struct T5GINVENTORYSYSTEM_API FStCraftingRecipe : public FTableRowBase
 {
 	GENERATED_USTRUCT_BODY()
 
+	// What item is created when complete
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FName itemName = "None";
+	FName itemName = FName();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int quantityRequired = 1;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TArray<ECraftingQuality> affectedQualities;
-	
-};
-
-USTRUCT(BlueprintType)
-struct T5GINVENTORYSYSTEM_API FStCraftingData
-{
-	GENERATED_USTRUCT_BODY()
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FText displayName = FText::FromString("Untitled");
-	
+	// How many of this item is created upon success
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int createsQuantity = 1;
 
+	// How many seconds it takes to complete this item
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float failureChance = 0.0;
+	int ticksToComplete = 1;
 
+	// How many ticks between ingredient consumption
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int waitTime = 0;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	ECraftingSkill craftingSkill = ECraftingSkill::GENERAL;
-
-	//UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	//	TArray<APrimaryWorkstation> allowedWorkstations;
+	int tickConsume = 1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TArray<FStCraftingRecipe> craftingRecipe;
+	int ticksCompleted = 1;
 
+	// The items required to create this item
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TMap<FName, int> craftingRecipe;
+
+	// The type of workstation required to see this recipe
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<ECraftingType> craftingTypes;
+	
 };
 
 
@@ -138,7 +98,18 @@ class T5GINVENTORYSYSTEM_API UCraftSystem : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 public:
 
-	UFUNCTION(BlueprintCallable)
-	static bool isSameCrafter(FStCrafterData craftOne, FStCrafterData craftTwo);
+	// Returns a pointer to the item data table for manual operations
+	UFUNCTION(BlueprintPure, Category = "Recipe Data System Globals")
+		static UDataTable* getRecipeDataTable();
 	
+	// Gets the recipe data structure from the given item name ('food_carrot')
+	// Performs an O(1) lookup, but retrieves data, which is slower than direct access.
+	UFUNCTION(BlueprintPure, Category = "Recipe Data System Globals")
+		static FStCraftingRecipe getRecipeFromItemName(FName itemName);
+	
+	UFUNCTION(BlueprintPure, Category = "Recipe Data System Globals")
+		static bool getItemHasRecipe(FName itemName);
+
+	UFUNCTION(BlueprintPure, Category = "Recipe Data System Globals")
+		static bool getRecipeIsValid(FStCraftingRecipe recipeData);
 };

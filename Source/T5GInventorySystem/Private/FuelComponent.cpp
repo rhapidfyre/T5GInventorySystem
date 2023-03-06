@@ -19,6 +19,11 @@ void UFuelComponent::SetupDefaults()
 	SetAutoActivate(true);
 }
 
+void UFuelComponent::OnRep_CurrentFuelItem_Implementation()
+{
+	OnFuelUpdated.Broadcast();
+}
+
 UFuelComponent::UFuelComponent()
 {
 	SetupDefaults();
@@ -34,6 +39,7 @@ UFuelComponent::UFuelComponent(FName startingItem)
 			const FTimespan fuelTime = UFuelSystem::getFuelBurnTime(fuelData);
 			mCurrentFuelItem	= startingItem;
 			mTimeRemaining		= fuelTime.GetTotalSeconds();
+			OnFuelUpdated.Broadcast();
 		}
 	}
 	SetupDefaults();
@@ -41,15 +47,65 @@ UFuelComponent::UFuelComponent(FName startingItem)
 
 void UFuelComponent::InitializeFuelSystem()
 {
-	if (UItemSystem::getItemNameIsValid(mCurrentFuelItem))
+	if (GetOwner()->HasAuthority())
 	{
-		const FStFuelData fuelData = UFuelSystem::getFuelItemFromName(mCurrentFuelItem);
-		const FTimespan fuelTime = UFuelSystem::getFuelBurnTime(fuelData);
-		mTimeRemaining = fuelTime.GetTotalSeconds();
-		GetWorld()->GetTimerManager().ClearTimer(mFuelTimer);
-		GetWorld()->GetTimerManager().SetTimer(mFuelTimer,this,
-				&UFuelComponent::CheckForConsumption,mTickRate,true);
-		GetWorld()->GetTimerManager().PauseTimer(mFuelTimer);
+		if (!bIsFuelSystemReady)
+		{
+			// Determine what fuel items are allowed for this entity
+			for (const FName fuelItem : FuelItemsAllowed)
+			{
+				if (!mAuthorizedFuel.Contains(fuelItem))
+					mAuthorizedFuel.Add(fuelItem);
+			}
+			//FuelItemsAllowed.Empty(0);
+	
+			// Get current/starting fuel item
+			if (UItemSystem::getItemNameIsValid(mCurrentFuelItem))
+			{
+				const FStFuelData fuelData = UFuelSystem::getFuelItemFromName(mCurrentFuelItem);
+				const FTimespan fuelTime = UFuelSystem::getFuelBurnTime(fuelData);
+				mTimeRemaining = fuelTime.GetTotalSeconds();
+			}
+		
+		}
+		
+		bIsFuelSystemReady = true;
+
+		// Autostart the system if it has fuel
+		StartFuelSystem();
+		
+	}//server
+	else
+	{
+		bIsFuelSystemReady = true;
+	}
+}
+
+void UFuelComponent::SetFuelConsumeRate(float inRate)
+{
+	if (GetOwner()->HasAuthority())
+	{
+		mTickRate = inRate > 0.f ? inRate : 0.f;
+		if (inRate <= 0.f)
+		{
+			mTimerTick = 1.f;
+			bIgnoreFuel = true;
+		}
+		else
+		{
+			mTimerTick = 1/inRate;
+			bIgnoreFuel = false;
+		}
+		
+		if (GetWorld()->GetTimerManager().TimerExists(mFuelTimer))
+		{
+			const bool wasPaused = GetWorld()->GetTimerManager().IsTimerPaused(mFuelTimer);
+			GetWorld()->GetTimerManager().PauseTimer(mFuelTimer);
+			GetWorld()->GetTimerManager().SetTimer(mFuelTimer,this,
+					&UFuelComponent::CheckForConsumption,mTimerTick,true);
+			if (!wasPaused)
+				GetWorld()->GetTimerManager().UnPauseTimer(mFuelTimer);
+		}
 	}
 }
 
@@ -57,23 +113,22 @@ void UFuelComponent::OnComponentCreated()
 {
 	Super::OnComponentCreated();
 	RegisterComponent();
-	InitializeFuelSystem();
-	if (bVerboseOutput) bShowDebug = true;
-	bIsFuelSystemReady = true;
 }
 
 bool UFuelComponent::StartFuelSystem()
 {
+	if (!bIsFuelSystemReady) return false;
 	if (GetOwner()->HasAuthority())
 	{
 		if (IsFuelAvailable())
 		{
-			if (GetWorld()->GetTimerManager().TimerExists(mFuelTimer))
+			if (!GetWorld()->GetTimerManager().TimerExists(mFuelTimer))
 			{
-				GetWorld()->GetTimerManager().UnPauseTimer(mFuelTimer);
-				OnFuelSystemToggled.Broadcast(true);
-				return true;
+				GetWorld()->GetTimerManager().SetTimer(mFuelTimer,this,
+						&UFuelComponent::CheckForConsumption,mTimerTick,true);
 			}
+			GetWorld()->GetTimerManager().UnPauseTimer(mFuelTimer);
+			return true;
 		}
 	}
 	return false;
@@ -84,11 +139,10 @@ bool UFuelComponent::StopFuelSystem()
 	if (GetOwner()->HasAuthority())
 	{
 		if (GetWorld()->GetTimerManager().TimerExists(mFuelTimer))
-		{
 			GetWorld()->GetTimerManager().PauseTimer(mFuelTimer);
-			OnFuelSystemToggled.Broadcast(false);
-			return true;
-		}
+		OnFuelSystemToggled.Broadcast(false);
+		bIsRunning = false;
+		return true;
 	}
 	return false;
 }
@@ -97,7 +151,7 @@ bool UFuelComponent::IsReserveFuelAvailable()
 {
 	if (IsValid(mInventoryFuel))
 	{
-		for (const FName fuelItem : FuelItemsAllowed)
+		for (const FName fuelItem : mAuthorizedFuel)
 		{
 			if (mInventoryFuel->getSlotsContainingItem(fuelItem).Num() > 0)
 			{
@@ -110,7 +164,7 @@ bool UFuelComponent::IsReserveFuelAvailable()
 
 bool UFuelComponent::RemoveFuel()
 {
-	for (const FName fuelItem : FuelItemsAllowed)
+	for (const FName fuelItem : mAuthorizedFuel)
 	{
 		const int itemsRemoved = mInventoryFuel->removeItemByQuantity(fuelItem, 1);
 		if (itemsRemoved > 0)
@@ -123,6 +177,7 @@ bool UFuelComponent::RemoveFuel()
 				mTimeRemaining = fuelTime.GetTotalSeconds();
 				return true;
 			}
+			OnFuelUpdated.Broadcast();
 		}
 	}
 	return false;
@@ -133,7 +188,7 @@ int UFuelComponent::GetTotalFuelItemsAvailable()
 	int itemsAvailable = 0;
 	if (IsValid(mInventoryFuel))
 	{
-		for (const FName fuelItem : FuelItemsAllowed)
+		for (const FName fuelItem : mAuthorizedFuel)
 		{
 			itemsAvailable += mInventoryFuel->getTotalQuantityInAllSlots(fuelItem);
 		}
@@ -141,19 +196,12 @@ int UFuelComponent::GetTotalFuelItemsAvailable()
 	return itemsAvailable;
 }
 
-FTimespan UFuelComponent::GetCurrentFuelTimeRemaining()
-{
-	FTimespan timespan;
-	timespan.FromSeconds(mTimeRemaining);
-	return timespan;
-}
-
 FTimespan UFuelComponent::GetTotalFuelTimeAvailable()
 {
 	FTimespan timespan(0,0,0);
 	if (IsValid(mInventoryFuel))
 	{
-		for (const FName fuelItem : FuelItemsAllowed)
+		for (const FName fuelItem : mAuthorizedFuel)
 		{
 			const int ttlInSlot = mInventoryFuel->getTotalQuantityInAllSlots(fuelItem);
 			const FStFuelData fuelData = UFuelSystem::getFuelItemFromName(fuelItem);
@@ -170,32 +218,30 @@ bool UFuelComponent::IsFuelAvailable()
 	return IsReserveFuelAvailable() || mTimeRemaining > 0.f;
 }
 
+void UFuelComponent::SetFuelInventory(UInventoryComponent* fuelInv)
+{
+	if (IsValid(fuelInv)) mInventoryFuel = fuelInv;
+	else mInventoryFuel = nullptr;
+}
+
+void UFuelComponent::SetStaticInventory(UInventoryComponent* staticInv)
+{
+	if (IsValid(staticInv)) mInventoryStatic = staticInv;
+	else mInventoryStatic = nullptr;
+}
+
 
 // Called when the game starts
 void UFuelComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	if (bStartActivated)
-		StartFuelSystem();
-}
-
-void UFuelComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME_CONDITION(UFuelComponent, mInventoryStatic, COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UFuelComponent, mInventoryFuel, COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UFuelComponent, mCurrentFuelItem, COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UFuelComponent, mTimeRemaining, COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UFuelComponent, mTickRate, COND_OwnerOnly);
-	DOREPLIFETIME(UFuelComponent, bIsRunning);
 }
 
 void UFuelComponent::CheckForConsumption()
 {
 	if (GetOwner()->HasAuthority())
 	{
-		bool runSystem = false;
-		
+		bool runSystem = true;
 		if (!bIgnoreFuel)
 		{
 		
@@ -211,14 +257,23 @@ void UFuelComponent::CheckForConsumption()
 			if (mTimeRemaining <= 0.f)
 			{
 				mTimeRemaining = 0.f;
+				mCurrentFuelItem = UItemSystem::getInvalidName();
 				runSystem = !isOverflowing && IsReserveFuelAvailable();
 				if (runSystem)
 					runSystem = ConsumeQueuedItem();
 			}
 		}
 		
-		if (!bIsRunning)
-			bIsRunning = runSystem;
+		if (bIsRunning && !runSystem)
+		{
+			StopFuelSystem();
+		}
+		else if (!bIsRunning && runSystem)
+		{
+			bIsRunning = true;
+			OnFuelSystemToggled.Broadcast(true);
+		}
+		
 	}
 }
 
@@ -270,18 +325,14 @@ void UFuelComponent::CreateByProduct(bool &isOverflowing)
 	isOverflowing = false;
 }
 
-void UFuelComponent::OnRep_FuelQuantity_Implementation()
-{
-	OnFuelUpdated.Broadcast(-1);
-}
 
-void UFuelComponent::OnRep_FuelItemData_Implementation()
+void UFuelComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-	OnFuelUpdated.Broadcast(-1);
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	//DOREPLIFETIME_CONDITION(UFuelComponent, mInventoryStatic,	COND_OwnerOnly);
+	//DOREPLIFETIME_CONDITION(UFuelComponent, mInventoryFuel,		COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(UFuelComponent, mCurrentFuelItem,	COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(UFuelComponent, mTimeRemaining,		COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(UFuelComponent, mTickRate,			COND_OwnerOnly);
+	DOREPLIFETIME(UFuelComponent, bIsRunning);
 }
-
-void UFuelComponent::OnRep_IsRunning_Implementation()
-{
-	OnFuelSystemToggled.Broadcast(bIsRunning);
-}
-

@@ -40,6 +40,7 @@ void UInventoryComponent::BeginPlay()
         UE_LOG(LogEngine, Display, TEXT("%s(%s): Data Table Was Found"),
             *GetName(), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
     }
+    m_bIsInventoryReady = true;
 }
 
 UInventoryComponent::UInventoryComponent()
@@ -166,7 +167,6 @@ void UInventoryComponent::OnComponentCreated()
     RegisterComponent();
     InitializeInventory();
     if (bVerboseOutput) bShowDebug = true;
-    m_bIsInventoryReady = true;
 }
 
 FStInventorySlot UInventoryComponent::getInventorySlotData(int slotNumber)
@@ -836,7 +836,7 @@ int UInventoryComponent::removeItemFromSlot(int slotNumber, int quantity, bool i
     return -1;
 }
 
-int UInventoryComponent::removeItemByQuantity(FName itemName, int quantity, bool dropToGround, bool removeAll)
+int UInventoryComponent::removeItemByQuantity(FName itemName, int quantity, bool isEquipment, bool dropToGround, bool removeAll)
 {
     if (bShowDebug)
     {
@@ -852,14 +852,16 @@ int UInventoryComponent::removeItemByQuantity(FName itemName, int quantity, bool
         for (int i = 0; i < itemSlots.Num(); i++)
         {
             // Continues removing items until quantity is met
-            const int numRemoved = removeItemFromSlot(i, qty, dropToGround, removeAll);
+            const int numRemoved = removeItemFromSlot(itemSlots[i], qty,
+                isEquipment, true, dropToGround, removeAll);
             qty -= numRemoved;
 
             if (qty < 1) break;
         }
         
         // If current quantity is not equal to the requested quantity, we succeeded
-        if (qty != quantity) return qty;
+        if (qty != quantity)
+            return (quantity - qty); // The amount actually removed
         
     }
     return -1;
@@ -1682,7 +1684,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
         if (UItemSystem::getItemDataIsValid(originItem))
         {
             // Remove the items from the origin inventory
-            moveQty = fromInventory->decreaseQuantityInSlot(fromSlot,moveQty,true);
+            moveQty = fromInventory->decreaseQuantityInSlot(fromSlot,moveQty,isFromEquipSlot);
             if (moveQty < 1)
             {
                 UE_LOG(LogTemp, Error, TEXT("TransferItems(%s): Failed to remove any items from origin inventory."),
