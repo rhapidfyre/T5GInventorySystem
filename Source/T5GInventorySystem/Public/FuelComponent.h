@@ -104,7 +104,13 @@ public:
 	 * @param staticInv The output inventory for byproducts
 	 */
 	UFUNCTION(BlueprintCallable)
-	void SetStaticInventory(UInventoryComponent* staticInv);
+	void SetOutputInventory(UInventoryComponent* staticInv);
+
+	UFUNCTION(BlueprintPure)
+	UInventoryComponent* getFuelInventory() const { return mInventoryFuel; };
+
+	UFUNCTION(BlueprintPure)
+	UInventoryComponent* getOutputInventory() const { return mInventoryStatic; };
 
 	/**
 	 * An array of all FStItemData by FName that this fuel system allows.
@@ -131,9 +137,14 @@ protected:
 private:
 
 	void SetupDefaults();
-	
-	UPROPERTY() UInventoryComponent* mInventoryStatic;
-	UPROPERTY() UInventoryComponent* mInventoryFuel;
+
+	// The inventory that byproduct will be deposited into.
+	// If null, the byproduct will spawn on the ground
+	UPROPERTY(Replicated) UInventoryComponent* mInventoryStatic;
+
+	// The inventory that byproduct will be taken from.
+	// If invalid, fuel consumption will not work.
+	UPROPERTY(Replicated) UInventoryComponent* mInventoryFuel;
 
 	UPROPERTY(Replicated) bool bIsRunning = false;
 	

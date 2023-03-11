@@ -116,12 +116,22 @@ bool UItemSystem::isItemActivated(FStItemData itemData)
 
 float UItemSystem::getItemDurability(FStItemData itemData)
 {
-    if (itemData.currentDurability > 0.0f)
-        return (itemData.currentDurability >= 1.0f ? 1.0f : itemData.currentDurability);
-    return (itemData.currentDurability >= 0.0f ? itemData.currentDurability : -1.0f);
+    // New copy of the same item for comparison
+    const FStItemData newItemCopy = getItemDataFromItemName(itemData.properName);
+    if (itemData.currentDurability >= 0.f)
+    {
+        // Master item has a valid durability value
+        if (newItemCopy.currentDurability > 0.f)
+        {
+            if (newItemCopy.currentDurability < itemData.currentDurability)
+                return newItemCopy.currentDurability;
+            return itemData.currentDurability;
+        }
+    }
+    return -1.f;
 }
 
-float UItemSystem::getDurability(FName itemName)
+float UItemSystem::getDurability(FName itemName) 
 {
     if (itemName == getInvalidName()) return false;
     return (getItemDurability(getItemDataFromItemName(itemName)));

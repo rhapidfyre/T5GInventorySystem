@@ -116,16 +116,10 @@ void UInventoryComponent::InitializeInventory()
                 if (StartingItems.IsValidIndex(0))
                 {
                     // Determine the starting item by item name given
-                    int slotNum         = StartingItems[0].startingSlot;
-                    bool isEquipSlot    = StartingItems[0].equipType != EEquipmentSlotType::NONE;
-                    FName newItemName   = UItemSystem::getItemName(StartingItems[0].itemData);
-                    FStItemData newItem = UItemSystem::getItemDataFromItemName(newItemName);
-                    
-                    if(newItem.currentDurability != StartingItems[0].itemData.currentDurability)
-                        newItem.currentDurability = StartingItems[0].itemData.currentDurability;
-                    
-                    if(newItem.itemRareness != StartingItems[0].itemData.itemRareness)
-                        newItem.itemRareness = StartingItems[0].itemData.itemRareness;
+                    const FName itemName = StartingItems[0].startingItem;
+                    int slotNum          = -1;
+                    bool isEquipSlot     = StartingItems[0].equipType != EEquipmentSlotType::NONE;
+                    FStItemData newItem  = UItemSystem::getItemDataFromItemName(itemName);
 
                     if (isEquipSlot)
                     {
@@ -143,7 +137,7 @@ void UInventoryComponent::InitializeInventory()
                         if (itemsAdded < 1)
                         {
                             UE_LOG(LogTemp, Warning, TEXT("%s(%s): Item(s) failed to add (StartingItem = %s)"),
-                                *GetName(), GetOwner()->HasAuthority()?TEXT("SRV"):TEXT("CLI"), *newItemName.ToString());
+                                *GetName(), GetOwner()->HasAuthority()?TEXT("SRV"):TEXT("CLI"), *itemName.ToString());
                         }
                     }
 
@@ -1396,10 +1390,10 @@ void UInventoryComponent::InventoryUpdate(int slotNumber, bool isEquipment, bool
         OnInventoryUpdated.Broadcast(slotNumber, isEquipment);
 
     // Trigger client delegates
-    Client_InventoryUpdate(isAtomic ? -1 : slotNumber, isEquipment);
+    Multicast_InventoryUpdate(isAtomic ? -1 : slotNumber, isEquipment);
 }
 
-void UInventoryComponent::Client_InventoryUpdate_Implementation(int slotNumber, bool isEquipment)
+void UInventoryComponent::Multicast_InventoryUpdate_Implementation(int slotNumber, bool isEquipment)
 {
     if (bShowDebug)
     {
@@ -1860,6 +1854,6 @@ void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
     // Update to owner only. When someone opens something like a storage chest, they'll be set to the owner.
-    DOREPLIFETIME_CONDITION(UInventoryComponent, m_inventorySlots, COND_OwnerOnly);
-    DOREPLIFETIME_CONDITION(UInventoryComponent, m_equipmentSlots, COND_OwnerOnly);
+    DOREPLIFETIME(UInventoryComponent, m_inventorySlots);
+    DOREPLIFETIME(UInventoryComponent, m_equipmentSlots);
 }

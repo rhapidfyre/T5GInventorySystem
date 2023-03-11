@@ -224,7 +224,7 @@ void UFuelComponent::SetFuelInventory(UInventoryComponent* fuelInv)
 	else mInventoryFuel = nullptr;
 }
 
-void UFuelComponent::SetStaticInventory(UInventoryComponent* staticInv)
+void UFuelComponent::SetOutputInventory(UInventoryComponent* staticInv)
 {
 	if (IsValid(staticInv)) mInventoryStatic = staticInv;
 	else mInventoryStatic = nullptr;
@@ -329,10 +329,10 @@ void UFuelComponent::CreateByProduct(bool &isOverflowing)
 void UFuelComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	//DOREPLIFETIME_CONDITION(UFuelComponent, mInventoryStatic,	COND_OwnerOnly);
-	//DOREPLIFETIME_CONDITION(UFuelComponent, mInventoryFuel,		COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UFuelComponent, mCurrentFuelItem,	COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UFuelComponent, mTimeRemaining,		COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(UFuelComponent, mTickRate,			COND_OwnerOnly);
+	DOREPLIFETIME(UFuelComponent, mCurrentFuelItem);
+	DOREPLIFETIME(UFuelComponent, mTimeRemaining);
+	DOREPLIFETIME(UFuelComponent, mTickRate);
+	DOREPLIFETIME(UFuelComponent, mInventoryStatic);
+	DOREPLIFETIME(UFuelComponent, mInventoryFuel);
 	DOREPLIFETIME(UFuelComponent, bIsRunning);
 }

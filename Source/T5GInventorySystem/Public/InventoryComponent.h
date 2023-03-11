@@ -646,8 +646,8 @@ private: //functions
     */
     void InventoryUpdate(int slotNumber = 0, bool isEquipment = false, bool isAtomic = false);
 
-	UFUNCTION(Client, Unreliable)
-	void Client_InventoryUpdate(int slotNumber = -1, bool isEquipment = false);
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_InventoryUpdate(int slotNumber = -1, bool isEquipment = false);
 	
     /**
     * Called when the server is reporting that a PLAYER wants to transfer items between
