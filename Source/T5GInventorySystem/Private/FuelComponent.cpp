@@ -235,6 +235,37 @@ void UFuelComponent::SetOutputInventory(UInventoryComponent* staticInv)
 void UFuelComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Attempts to automatically detect the fuel inventory
+	if (!IsValid(getFuelInventory()))
+	{
+		const AActor* ownerActor = GetOwner();
+		if (IsValid(ownerActor))
+		{
+			TArray<UActorComponent*> invComps = ownerActor->GetComponentsByTag(
+				UInventoryComponent::StaticClass(), FName("fuel"));
+			if (invComps.IsValidIndex(0))
+			{
+				SetFuelInventory(Cast<UInventoryComponent>(invComps[0]));
+			}
+		}
+	}
+
+	// Attempts to automatically detect the output inventory
+	if (!IsValid(getOutputInventory()))
+	{
+		const AActor* ownerActor = GetOwner();
+		if (IsValid(ownerActor))
+		{
+			TArray<UActorComponent*> invComps = ownerActor->GetComponentsByTag(
+				UInventoryComponent::StaticClass(), FName("output"));
+			if (invComps.IsValidIndex(0))
+			{
+				SetOutputInventory(Cast<UInventoryComponent>(invComps[0]));
+			}
+		}
+	}
+
 }
 
 void UFuelComponent::CheckForConsumption()

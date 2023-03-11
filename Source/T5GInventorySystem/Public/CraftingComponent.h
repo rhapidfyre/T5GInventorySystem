@@ -46,6 +46,12 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void SetInputInventory(UInventoryComponent* inputInventory);
 
+	UFUNCTION(BlueprintPure)
+	UInventoryComponent* GetInputInventory() const { return mInventoryInput; }
+
+	UFUNCTION(BlueprintPure)
+	UInventoryComponent* GetOutputInventory() const { return mInventoryOutput; }
+
 	// Run before using SetInputInventory. Sets the output inventory.
 	UFUNCTION(BlueprintCallable)
 	void SetOutputInventory(UInventoryComponent* outputInventory);

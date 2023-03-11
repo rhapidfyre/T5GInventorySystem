@@ -15,6 +15,37 @@ UCraftingComponent::UCraftingComponent()
 void UCraftingComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Attempts to automatically detect the input inventory
+	if (!IsValid(GetInputInventory()))
+	{
+		const AActor* ownerActor = GetOwner();
+		if (IsValid(ownerActor))
+		{
+			TArray<UActorComponent*> invComps = ownerActor->GetComponentsByTag(
+				UInventoryComponent::StaticClass(), FName("craft"));
+			if (invComps.IsValidIndex(0))
+			{
+				SetInputInventory(Cast<UInventoryComponent>(invComps[0]));
+			}
+		}
+	}
+
+	// Attempts to automatically detect the output inventory
+	if (!IsValid(GetOutputInventory()))
+	{
+		const AActor* ownerActor = GetOwner();
+		if (IsValid(ownerActor))
+		{
+			TArray<UActorComponent*> invComps = ownerActor->GetComponentsByTag(
+				UInventoryComponent::StaticClass(), FName("output"));
+			if (invComps.IsValidIndex(0))
+			{
+				SetOutputInventory(Cast<UInventoryComponent>(invComps[0]));
+			}
+		}
+	}
+	
 }
 
 void UCraftingComponent::InitializeCraftingStation()
