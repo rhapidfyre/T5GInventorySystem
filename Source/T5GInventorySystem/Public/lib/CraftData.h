@@ -25,6 +25,7 @@ enum class ECraftingType : uint8
 	LOOM		UMETA(DisplayName = "Loom / Tailoring"),
 	ANVIL		UMETA(DisplayName = "Blacksmith Anvil"),
 	WORKBENCH	UMETA(DisplayName = "Workbench"),
+	ADVWORK		UMETA(DisplayName = "Advanced Workbench")
 };
 
 // FCrafterData
@@ -57,10 +58,34 @@ struct T5GINVENTORYSYSTEM_API FStCraftRecycleData : public FTableRowBase
 	bool spawnsInWorld = false;
 };
 
+// Simple struct for replication
+USTRUCT(BlueprintType)
+struct T5GINVENTORYSYSTEM_API FStCraftQueueData
+{
+	GENERATED_BODY()
+
+	FStCraftQueueData() {};
+	FStCraftQueueData(FName iName, UTexture2D* iTexture)
+	{
+		itemName = iName;
+		itemTexture = iTexture;
+	}
+	
+	// The item name being crafted (also the row name for the data tables)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FName itemName			= FName();
+	
+	// The image to show in the crafting panel
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) UTexture2D* itemTexture	= nullptr;
+	
+	// How many crafting ticks have passed
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) int   ticksCompleted	= 0;
+	
+};
+
 USTRUCT(BlueprintType)
 struct T5GINVENTORYSYSTEM_API FStCraftingRecipe : public FTableRowBase
 {
-	GENERATED_USTRUCT_BODY()
+	GENERATED_BODY()
 
 	// What item is created when complete
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -77,9 +102,6 @@ struct T5GINVENTORYSYSTEM_API FStCraftingRecipe : public FTableRowBase
 	// How many ticks between ingredient consumption
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int tickConsume = 1;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int ticksCompleted = 1;
 
 	// The items required to create this item
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

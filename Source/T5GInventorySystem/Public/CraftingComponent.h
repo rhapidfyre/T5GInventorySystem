@@ -11,6 +11,7 @@
 #include "CraftingComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnItemCreated, int, slotNumber);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnQueueUpdated, int, slotNumber);
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class T5GINVENTORYSYSTEM_API UCraftingComponent : public UActorComponent
@@ -55,6 +56,9 @@ public:
 	// Run before using SetInputInventory. Sets the output inventory.
 	UFUNCTION(BlueprintCallable)
 	void SetOutputInventory(UInventoryComponent* outputInventory);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int MaxItemsInQueue = 4;
 	
 	/**
 	 * Sends a request to the component to create the given item. Checks if mInventoryInput contains
@@ -62,11 +66,34 @@ public:
 	 * @param itemName The FName of the item from DT_ItemData that we want to craft
 	 * @return True if the recipe requirements were met
 	 */
+	UFUNCTION(BlueprintCallable)
 	bool RequestToCraft(FName itemName);
+
+	UFUNCTION(BlueprintPure)
+	TArray<FStCraftQueueData> GetCraftingQueue() const { return mCraftingQueue; }
+
+	UFUNCTION(BlueprintPure)
+	FStCraftQueueData GetItemInCraftingQueue(int slotNumber = 0);
+
+	UFUNCTION(BlueprintPure)
+	int GetNumItemsInCraftingQueue() const { return mCraftingQueue.Num(); }
+
+	/** Cancel an item currently being crafted. Refunds any consumed ingredients.
+	 * @param queueIndex The index of the queue to be removed/canceled
+	 * @return True if cancel was successful, false if it failed or index was invalid.
+	 */
+	UFUNCTION(BlueprintCallable)
+	bool CancelCrafting(int queueIndex = 0);
 
 	// Determines what category of crafting items this component can create.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	TArray<ECraftingType> EligibleCraftingTypes;
+	
+	UPROPERTY(BlueprintAssignable, Category = "Crafting Events")
+	FOnItemCreated OnItemCreated;
+	
+	UPROPERTY(BlueprintAssignable, Category = "Crafting Events")
+	FOnQueueUpdated OnQueueUpdated;
 	
 protected:
 
@@ -103,8 +130,14 @@ private:
 	UPROPERTY(Replicated) UInventoryComponent* mInventoryOutput;
 
 	UPROPERTY() FTimerHandle mCraftingTimer;
+
+	// Contains the item name, item texture, and ticks completed
+	// Makes replication easy and fast.
+	UPROPERTY(Replicated, ReplicatedUsing = OnRep_CraftingQueue)
+	TArray<FStCraftQueueData> mCraftingQueue;
+	UFUNCTION(NetMulticast, Unreliable)
+	void OnRep_CraftingQueue();
 	
-	UPROPERTY() TArray<FStCraftingRecipe> mCraftingQueue;
 
 	int mCraftingQueueSize;
 	

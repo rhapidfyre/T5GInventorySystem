@@ -253,7 +253,7 @@ int UInventoryComponent::getTotalQuantityInAllSlots(FName itemName)
                 total += m_inventorySlots[i].slotQuantity;
         }
     }
-    return 0;
+    return total;
 }
 
 int UInventoryComponent::getFirstEmptySlot()
