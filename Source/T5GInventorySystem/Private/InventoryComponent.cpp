@@ -1463,7 +1463,7 @@ bool UInventoryComponent::transferItemBetweenSlots(
     return false;
 }
 
-bool UInventoryComponent::activateItemInSlot(int slotNumber, bool isEquipment)
+bool UInventoryComponent::activateItemInSlot(int slotNumber, bool isEquipment, bool consumeItem)
 {
     if (bShowDebug)
     {
@@ -1488,21 +1488,40 @@ bool UInventoryComponent::activateItemInSlot(int slotNumber, bool isEquipment)
                         break;
                     }
                 }
-                swapOrStackSlots(this,slotNumber, destinationSlot, 1,
+                return swapOrStackSlots(this,slotNumber, destinationSlot, 1,
                 false, !isEquipment, isEquipment);
+            }
+            // The item is consumed, or consume is forced
+            if (consumeItem || itemInSlot.consumeOnUse)
+            {
+                // If the item fails to be removed/deducted
+                if (decreaseQuantityInSlot(slotNumber,1,isEquipment) < 1)
+                {
+                    return false;
+                }
             }
             else
             {
-                if (decreaseQuantityInSlot(slotNumber,1,isEquipment) > 0)
-                {
-                    //TODO - Spawn a UActor and activate the item
-                    //       Should spawn owned by *this* inventory's owner.
-                    return true;
-                }
+                OnItemActivated.Broadcast(UItemSystem::getItemName(itemInSlot));
             }
+            return true;
         }
     }
     return false;
+}
+
+void UInventoryComponent::Server_RequestItemActivation_Implementation(
+    UInventoryComponent* inventoryUsed, int slotNumber, bool isEquipment)
+{
+    if (GetOwner()->HasAuthority())
+    {
+        const FStItemData itemData = inventoryUsed->getItemInSlot(slotNumber, isEquipment);
+        if (UItemSystem::getItemDataIsValid(itemData))
+        {
+            const FName itemName = inventoryUsed->getItemNameInSlot(slotNumber, isEquipment);
+            inventoryUsed->activateItemInSlot(slotNumber, isEquipment);
+        }
+    }
 }
 
 bool UInventoryComponent::setNotifyItem(FStItemData itemData, int quantityAffected)

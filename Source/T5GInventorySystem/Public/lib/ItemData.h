@@ -98,6 +98,11 @@ struct T5GINVENTORYSYSTEM_API FStItemData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float currentDurability = -1.0f;
 
+	// True = Delete on Activation.
+	// False = Never Delete on Activation
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool consumeOnUse = false;
+
 	// Value of the item, in base credits
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int basePrice = 1;

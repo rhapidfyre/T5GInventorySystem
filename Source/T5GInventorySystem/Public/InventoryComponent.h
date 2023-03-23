@@ -21,6 +21,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInventoryUpdated, int, slotNumbe
  * Tells the client that there is an item to be processed.
  */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnNotificationAvailable);
+/* Delegate that is called whenever an item is activated. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnItemActivated, FName, itemName);
 
 UCLASS(BlueprintType, Blueprintable, ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class T5GINVENTORYSYSTEM_API UInventoryComponent : public UActorComponent
@@ -48,10 +50,13 @@ public:	//functions
 
     // Event Dispatchers/Delegates
 	UPROPERTY(BlueprintAssignable, Category = "Inventory Events")
-		FOnInventoryUpdated OnInventoryUpdated;
+	FOnInventoryUpdated OnInventoryUpdated;
 	
 	UPROPERTY(BlueprintAssignable, Category = "Inventory Events")
-		FOnNotificationAvailable OnNotificationAvailable;
+	FOnNotificationAvailable OnNotificationAvailable;
+	
+	UPROPERTY(BlueprintAssignable, Category = "Inventory Events")
+	FOnItemActivated OnItemActivated;
 	
     /**
      * Returns the size of the inventory, 1-indexed
@@ -675,10 +680,15 @@ private: //functions
     *
     * @param slotNumber The number of the inventory slot containing the item to be activated
     * @param isEquipment True if this is an equipment slot. False by default.
+    * @param consumeItem True consumes the item, whether it's consumable or not. False by default.
     * @return True if the item was successfully activated
     */
 	UFUNCTION(BlueprintCallable)
-    bool activateItemInSlot(int slotNumber, bool isEquipment = false);
+    bool activateItemInSlot(int slotNumber, bool isEquipment = false, bool consumeItem = false);
+
+	UFUNCTION(Server, Reliable)
+	void Server_RequestItemActivation(UInventoryComponent* inventoryUsed,
+			int slotNumber = 0, bool isEquipment = false);
 
     /**
      * Adds the item to the notification TMap, notifying the player about a modification to their inventory.

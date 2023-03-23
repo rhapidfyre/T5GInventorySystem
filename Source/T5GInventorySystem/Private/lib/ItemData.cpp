@@ -18,7 +18,7 @@ FStItemData UItemSystem::getItemDataFromItemName(FName itemName)
             if ( const UDataTable* dt = getItemDataTable() )
             {
                 if (IsValid(dt))
-                {
+                { 
                     const FString errorCaught;
                     FStItemData* itemDataPtr = dt->FindRow<FStItemData>(itemName, errorCaught);
                     if (itemDataPtr != nullptr)
