@@ -1500,10 +1500,7 @@ bool UInventoryComponent::activateItemInSlot(int slotNumber, bool isEquipment, b
                     return false;
                 }
             }
-            else
-            {
-                OnItemActivated.Broadcast(UItemSystem::getItemName(itemInSlot));
-            }
+            OnItemActivated.Broadcast(UItemSystem::getItemName(itemInSlot));
             return true;
         }
     }

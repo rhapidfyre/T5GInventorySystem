@@ -13,7 +13,7 @@ FStItemData UItemSystem::getItemDataFromItemName(FName itemName)
 {
     if (itemName.IsValid())
     {
-        if (itemName != UItemSystem::getInvalidName())
+        if (itemName != getInvalidName())
         {
             if ( const UDataTable* dt = getItemDataTable() )
             {
@@ -39,7 +39,7 @@ bool UItemSystem::getItemNameIsValid(FName itemName, bool performLookup)
     {
         if (performLookup)
         {
-            const FStItemData itemData = (UItemSystem::getItemDataFromItemName(itemName));
+            const FStItemData itemData = (getItemDataFromItemName(itemName));
             return (itemData.properName != getInvalidName());
         }
         return (itemName != getInvalidName());
