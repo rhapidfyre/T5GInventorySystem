@@ -1865,6 +1865,11 @@ void UInventoryComponent::Server_StopUseOtherInventory_Implementation(UInventory
     }
 }
 
+
+/****************************************
+ * REPLICATION
+***************************************/
+
 void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> & OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
