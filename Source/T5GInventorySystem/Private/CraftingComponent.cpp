@@ -220,8 +220,8 @@ bool UCraftingComponent::CancelCrafting(int queueIndex)
 		if (ingredientMultiplier > 0)
 		{
 			for (const TPair<FName, int> thisRecipe : craftRecipe.craftingRecipe)
-			mInventoryInput->addItemByName(thisRecipe.Key, thisRecipe.Value * ingredientMultiplier,
-				true, false, false);
+			mInventoryInput->AddItemFromDataTable(thisRecipe.Key, thisRecipe.Value * ingredientMultiplier,
+				-1, true, false, false);
 		}
 		return true;
 	}
@@ -363,8 +363,8 @@ void UCraftingComponent::CompleteCraftingItem(int queueSlot)
 
 	// DO NOT remove from the queue once complete.
 	// Mark as complete, and wait for DoTick to handle.
-	const int itemsAdded = mInventoryOutput->addItemByName(
-		mCraftingQueue[queueSlot].itemName, craftingRecipe.createsQuantity,
+	const int itemsAdded = mInventoryOutput->AddItemFromDataTable(
+		mCraftingQueue[queueSlot].itemName, craftingRecipe.createsQuantity, -1,
 		true, true, true);
 	
 }

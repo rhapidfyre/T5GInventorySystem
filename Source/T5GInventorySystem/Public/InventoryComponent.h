@@ -1,6 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 // ReSharper disable CppUE4CodingStandardNamingViolationWarning
+// ReSharper disable CppUEBlueprintCallableFunctionUnused
+// ReSharper disable CppUEBlueprintCallableFunctionUnused
 #pragma once
 
 #include "CoreMinimal.h"
@@ -70,14 +72,6 @@ public:	//functions
      */
     int getNumEquipmentSlots() const { return m_equipmentSlots.Num(); }
 
-    /**
-     * Gets a copy of the entire slot data struct from the requested slotNumber
-     * @param slotNumber An int of the inventory slot requested
-     * @return A FStSlotContents object copied from the data of the found slot.
-     */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        FStInventorySlot getInventorySlotData(int slotNumber);
-
 	/**
 	 * Returns the item found in the given slot.
 	 * @param slotNumber An int representing the inventory slot requested
@@ -118,7 +112,7 @@ public:	//functions
      * @return The slotNumber of the first empty slot. Negative indicates full inventory.
      */
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        int getFirstEmptySlot();
+        int GetFirstEmptySlot();
 
     /**
      * Returns the total weight of all items in the inventory.
@@ -163,14 +157,6 @@ public:	//functions
 		TArray<FStInventorySlot> getEquipmentSlots() { return m_equipmentSlots; };
 
     /**
-     * Returns a copy of the slot data for the slot requested.
-     * @param slotNumber An int representing the inventory slot
-     * @return FStSlotContents of the found slot. Returns default struct if slot is empty or not found.
-     */
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        FStInventorySlot getInventorySlot(int slotNumber);
-
-    /**
      * Gets the index (slot) of the equipment slot where equipment type was found.
      * @param equipEnum Enum of the slotType to find.
      * @return Int representing the slot number found. Negative indicates failure.
@@ -179,9 +165,8 @@ public:	//functions
         int getEquipmentSlotNumber(EEquipmentSlotType equipEnum);
     
     /**
-     * Gets a copy of the equipment slot for the requested equipment type. On failure,
-     * it will return a default FStEquipmentSlot struct. Check 'slotType == NONE' for validity.
-     * 
+     * DEPRECATED - Use GetInventorySlot
+     * @deprecated Use GetInventorySlot(SlotNumber, true)
      * @param equipEnum Enum of the slotType to find.
      * @return A copy of an FStEquipmentSlot struct that was found.
      */
@@ -189,19 +174,21 @@ public:	//functions
         FStInventorySlot getEquipmentSlot(EEquipmentSlotType equipEnum);
 
     /**
-     * Override which uses the direct slot number instead of the equip enum.
+     * Finds the given equipment slot by specific slot number
      * @param slotNumber Represents the slot of 'm_equipmentSlots' to be examined.
      * @return FStEquipmentSlot representing the slot found. Check 'FStEquipmentSlot.slotType = NONE' for failure
      */
-    FStInventorySlot getEquipmentSlot(int slotNumber);
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
+		FStInventorySlot getEquipmentSlotByNumber(int slotNumber);
     
     /**
      * Returns the truth of whether the requested slot is a real inventory slot or not.
      * @param slotNumber An int int of the slot being requested
+     * @poaram IsEquipmentSlot True if checking an equipment slot
      * @return Boolean
      */
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-		bool isValidInventorySlot(int slotNumber);
+		bool IsValidSlot(int slotNumber, bool IsEquipmentSlot = false);
     
 	/**
 	 * Returns the truth of whether the requested slot is a real equipment slot or not.
@@ -222,7 +209,7 @@ public:	//functions
 
 	/**
 	 * Returns the truth of whether the requested slot is empty.
-	 * Performs isValidInventorySlot() internally. No need to call both functions.
+	 * Performs IsValidSlot() internally. No need to call both functions.
 	 * @param slotNumber The slot number to check.
 	 * @param isEquipment If true, checks equipment slots. If false, checks inventory slots.
 	 * @return If true, the slot is vacant.
@@ -232,7 +219,7 @@ public:	//functions
 	
 	/**
 	 * Returns the truth of whether the requested slot is empty.
-	 * Performs isValidInventorySlot() internally. No need to call both functions.
+	 * Performs IsValidSlot() internally. No need to call both functions.
 	 * @param equipSlot The Equip enum for the slot we're checking.
 	 * @return True if the equipment slot is unoccupied.
 	 */
@@ -262,173 +249,23 @@ public:	//functions
     */
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
         bool isInventoryReady() { return m_bIsInventoryReady; }
-
-    /**
-    * Performs a data table lookup for the item name provided, adding a completely new item
-    * to the inventory. Once the item has been added, you can then use 'getItemInInventorySlot(return)'
-    * to operate on the item directly (such as changing durability, etc).
-    *
-    * @param itemName item we are trying to add.
-    * @param quantity How many to add. Defaults to 1.
-    * @param overflowAdd If true, any items remaining after add will attempt to add to the next empty slot.
-    * @param overflowDrop If true, the item will fall to the floor if it can't be added. True by default.
-    * @param showNotify If true, add will show a notification. False by default.
-    * @return The number of items actually added
-    */
-    UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
-        int addItemByName(FName itemName, int quantity = 1,
-        bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
-
-	/**
-	* Finds the item at the given location in the origination inventory, copies
-	* it to an entirely new item. The item will be inserted at the first available slot,
-	* either stacking with an identical item or being added to a new empty slot.
-	* 
-	* @param fromInventory The inventory that is donating the item.
-	* @param fromSlot The slot where the item reference can be found.
-	* @param quantity How many to add. Defaults to 1.
-	* @param overflowAdd If true, remaining items after add will attempt to be added to the next empty slot.
-	* @param overflowDrop If true, the item will fall to the floor if it can't be added. True by default.
-	* @param showNotify If true, add will show a notification. False by default.
-   * @return Slot number the item was added to. Negative value indicates failure.
-	*/
-	int addItemFromExisting(UInventoryComponent* fromInventory, int fromSlot, int quantity,
-	bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
-
-	/**
-	* (overload) Finds the item at the given location in the origination inventory, copies
-	* it to an entirely new item. The item will be inserted at the first available slot,
-	* either stacking with an identical item or being added to a new empty slot.
-	* 
-	* @param fromInventory The inventory that is donating the item.
-	* @param fromSlot The slot where the item reference can be found.
-	* @param quantity How many to add. Defaults to 1.
-	* @param remainder How many items could not be added.
-	* @param overflowAdd If true, remaining items after add will attempt to be added to the next empty slot.
-	* @param overflowDrop If true, the item will fall to the floor if it can't be added. True by default.
-	* @param showNotify If true, add will show a notification. False by default.
-   * @return Slot number the item was added to. Negative value indicates failure.
-	*/
-	int addItemFromExistingWithRemainder(UInventoryComponent* fromInventory, int fromSlot, int quantity, int& remainder,
+	
+	UFUNCTION(BlueprintCallable, Category = "Item Management")
+	int AddItemFromExistingSlot(const FStInventorySlot& NewItem, int quantity, int SlotNumber = -1,
 		bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
 
-	/**
-	* @param newItem Pointer to the item being added. Must be a new object, not a const pointer.
-	* @param quantity How many to add. Defaults to 1.
-	* @param overflowAdd If true, any items that don't stack will be added to the next empty slot.
-	* @param overflowDrop If true, any remaining quantity that does not fit into the inventory will fall to the ground.
-	* @param showNotify If true, add will show a notification. False by default.
-   * @return The number of items actually added
-	*/
-	int addItemFromExisting(FStItemData newItem, int quantity,
-	bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
-
-	/**
-	 * Acquires the existing item, creates a copy of it, and passes the new item object
-	 * to the overload version of this function for addition to the inventory.
-	 *
-	 * @param fromInventory The inventory donating the item.
-	 * @param fromSlot Which slot the item is coming from.
-	 * @param toSlot Which slot to add the item to. -1 means to find the first empty slot.
-	 * @param quantity How many to add. Defaults to 1.
-	 * @param overflowAdd If true, any items that don't stack will be added to the next empty slot.
-	 * @param overflowDrop If true, any remaining quantity that does not fit into the inventory will fall to the ground.
-	 * @param showNotify If true, will show a notification. False by default.
-	 * @return An integer representing how many items failed to add. Negative indicates failure.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
-		int addItemFromExistingToSlot(UInventoryComponent* fromInventory,
-				int fromSlot, int toSlot, int quantity = 1,
-				bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
-
-	/**
-	 * (overload) Acquires the existing item, creates a copy of it, and passes the new item object
-	 * to the overload version of this function for addition to the inventory.
-	 *
-	 * @param existingItem The existing item to add
-	 * @param toSlot Which slot to add the item to. -1 means to find the first empty slot.
-	 * @param quantity How many to add. Defaults to 1.
-	 * @param overflowAdd If true, any items that don't stack will be added to the next empty slot.
-	 * @param overflowDrop If true, any remaining quantity that does not fit into the inventory will fall to the ground.
-	 * @param showNotify If true, will show a notification. False by default.
-	 * @return An integer representing how many items failed to add. Negative indicates failure.
-	 */
-		int addItemFromExistingToSlot(FStItemData existingItem, int toSlot, int quantity = 1,
-				bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
-
-	/**
-	 * (overload) Acquires the existing item, creates a copy of it, and passes the new item object
-	 * to the overload version of this function for addition to the inventory.
-	 *
-	 * @param fromInventory The inventory donating the item.
-	 * @param fromSlot Which slot the item is coming from.
-	 * @param toSlot Which slot to add the item to. -1 means to find the first empty slot.
-	 * @param quantity How many to add. Defaults to 1.
-	 * @param remainder How many items could not be added.
-	 * @param overflowAdd If true, any items that don't stack will be added to the next empty slot.
-	 * @param overflowDrop If true, any remaining quantity that does not fit into the inventory will fall to the ground.
-	 * @param showNotify If true, will show a notification. False by default.
-	 * @return An integer representing how many items failed to add. Negative indicates failure.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
-		int addItemFromExistingToSlotWithRemainder(UInventoryComponent* fromInventory,
-				int fromSlot, int toSlot, int quantity, int& remainder,
-				bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
-
-	/**
-	 * (overload) Adds a pre-existing item into the given slot. If the slot given is negative,
-	 * it will add the item to the first empty slot it finds. Fails if the slot has a different item in it.
-	 * If the given slot already has an identical item, it will stack them, accounting for
-	 * durability, crafting differences, etc.
-	 *
-	 * @param newItem The new item to be added. New item, not a const pointer.
-	 * @param toSlot Which slot to add the item to. -1 means to find the first empty slot.
-	 * @param quantity How many to add. Defaults to 1.
-	 * @param remainder How many items could not be added.
-	 * @param overflowAdd If true, any items that don't stack will be added to the next empty slot.
-	 * @param overflowDrop If true, any remaining quantity that does not fit into the inventory will fall to the ground.
-	 * @param showNotify If true, will show a notification. False by default.
-	 * @return An integer representing how many items were actually added. Values less than 1 indicate failure.
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
-		int addItemFinalWithRemainder(FStItemData newItem, int toSlot, int quantity, int& remainder,
+    UFUNCTION(BlueprintCallable, Category = "Item Management")
+	int AddItemFromDataTable(FName ItemName, int quantity, int SlotNumber = -1,
 		bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
-
+	
 	/**
-	 * (overload) Adds a pre-existing item into the given slot. If the slot given is negative,
-	 * it will add the item to the first empty slot it finds. Fails if the slot has a different item in it.
-	 * If the given slot already has an identical item, it will stack them, accounting for
-	 * durability, crafting differences, etc.
-	 *
-	 * @param newItem The new item to be added. New item, not a const pointer.
-	 * @param toSlot Which slot to add the item to. -1 means to find the first empty slot.
-	 * @param quantity How many to add. Defaults to 1.
-	 * @param overflowAdd If true, any items that don't stack will be added to the next empty slot.
-	 * @param overflowDrop If true, any remaining quantity that does not fit into the inventory will fall to the ground.
-	 * @param showNotify If true, will show a notification. False by default.
-	 * @return An integer representing how many items were actually added. Values less than 1 indicate failure.
+	 * Returns a copy of the slot data for the slot requested.
+	 * @param slotNumber An int representing the inventory slot
+	 * @param IsEquipment True if the slot is an equipment slot
+	 * @return FStSlotContents of the found slot. Returns default struct if slot is empty or not found.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
-		int addItemFinal(FStItemData newItem, int toSlot, int quantity = 1,
-				bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
-
-    /**
-    * Adds a brand new item to the inventory from nonexistence. If slot number is
-    * negative, it will add the item to the first empty slot available. If an
-    * item exists in this slot already, it will stack the item if it's exactly identical,
-    * accounting for durability and crafting uniqueness.
-    *
-    * @param itemName The FName of the item we are trying to add.
-    * @param slotNumber Which slot to add the item to. Negative = add to first empty slot.
-	* @param quantity How many to add. Defaults to 1.
-	* @param overflowAdd If true, any items that don't stack will be added to the next empty slot.
-	* @param overflowDrop If true, any remaining quantity that does not fit into the inventory will fall to the ground.
-    * @param showNotify If true, will show a notification. False by default.
-    * @return Integer representing how many items were actually added. Negative indicates failure to add altogether.
-    */
-    UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
-        int addItemByNameToSlot(FName itemName, int slotNumber = 0, int quantity = 1,
-			bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
+		FStInventorySlot GetCopyOfSlot(int slotNumber, bool IsEquipment = false);
 
     /**
      * Attempts to read the item from the provided slot, and if it is a valid
@@ -459,7 +296,7 @@ public:	//functions
 	
     /**
     * Starting from the first slot where the item is found, removes the given quantity of
-    * the given itemName until all of the item has been removed or the removal quantity
+    * the given ItemName until all of the item has been removed or the removal quantity
     * has been reached (inclusive).
     *
     * @param itemName The name of the item we are wanting to remove from the inventory
@@ -551,30 +388,15 @@ public:	//functions
 	
 private: //functions
     
-    /**
-    * Creates an entirely new item that did not previously exist, by looking up
-    * the given itemName in the items database. If found, it will construct
-    * a new item, inserting it into the inventory at the first eligible location.
-    * If a slot number is given, this function will return how many are left after stack limit reached.
-    * @param itemName The FName of the item to be added.
-    * @param quantity The amount of the item to be added.
-    * @param showNotify Whether a notification should appear. False by default.
-    * @param slotNumber The slot to add the item to. Negative chooses first empty slot. Returns slot item was added into.
-    * @return The total number of items actually added. Negative indicates failure.
-    */
-    int addItem(FName itemName, int quantity, bool showNotify, int& slotNumber);
-    
-    /**
-    * Creates a copy of the given pointer const itemData, and adds it to the inventory.
-    * If a slot number is given, this function will return how many are left after stack limit reached.
-    * @param newItem The new item to be added.
-    * @param quantity The amount to be added to the slot.
-    * @param showNotify Whether a notification should appear. False by default.
-    * @param slotNumber The slot to insert at. Negative means first empty slot. Returns slot item was added into.
-    * @return The total number of items actually added. Negative indicates failure.
-    */
-    int addItem(FStItemData newItem, int quantity, bool showNotify, int& slotNumber);
-	
+	/**
+	 * Returns a reference to the slot data for the slot requested.
+	 * @param slotNumber An int representing the inventory slot
+	 * @param IsEquipment True if the slot is an equipment slot
+	 * @return FStSlotContents of the found slot. Returns default struct if slot is empty or not found.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
+		FStInventorySlot& GetInventorySlot(int slotNumber, bool IsEquipment = false);
+
 	/**
 	* Increases the amount of an existing item by the quantity given.
 	* If the given slot is empty, it will do nothing and fail.
@@ -692,17 +514,17 @@ private: //functions
 
     /**
      * Adds the item to the notification TMap, notifying the player about a modification to their inventory.
-     * @param itemData The item data that is being notified
+     * @param itemName The item name that is being notified
      * @param quantityAffected The quantity that was affected (how many the player gained/lost)
      * @return True if the notification was successfully added to the queue.
      */
-	bool setNotifyItem(FStItemData itemData, int quantityAffected);
+	bool setNotifyItem(FName itemName, int quantityAffected);
 	
 	UFUNCTION()
-	void OnRep_InventorySlotUpdated();
+	void OnRep_InventorySlotUpdated() const;
 	
 	UFUNCTION()
-	void OnRep_EquipmentSlotUpdated();
+	void OnRep_EquipmentSlotUpdated() const;
 
 public: //variables
 
@@ -722,10 +544,6 @@ public: //variables
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
 	TArray<EEquipmentSlotType> EligibleEquipmentSlots;
-
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
-	TArray<UInputAction*> HotkeyInputs;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
 		TArray<FStStartingItem> StartingItems;
@@ -748,6 +566,9 @@ private: //variables
 	TArray<FStInventoryNotify> m_notifications;
 	
     bool m_bIsInventoryReady = false;
+
+	// Basic Empty Slot for Referencing
+	UPROPERTY() FStInventorySlot m_EmptySlot = FStInventorySlot();
 
 	//-------------------------
 	//-------------------------          REPLICATION

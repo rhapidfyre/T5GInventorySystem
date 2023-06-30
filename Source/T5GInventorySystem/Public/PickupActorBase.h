@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMeshActor.h"
-#include "lib/ItemData.h"
+#include "lib/InventorySlot.h"
 
 #include "PickupActorBase.generated.h"
 
@@ -20,56 +20,53 @@ public:
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 	virtual void PostLoad() override;
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings");
-	float m_sphereRadius = 64.0f;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings");
-	FName m_itemName = UItemSystem::getInvalidName();
+	float SphereRadius = 64.0f;
+	
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings");
+	float ItemDurability = 0.f;
 
-	UPROPERTY(Replicated)
-	FStItemData m_itemData;
+	// Used to set the item that will spawn prior to BeginPlay()
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings");
+	FName ItemName = FName();
+
+	// Used to set how many items will spawn prior to BeginPlay()
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings");
+	int SpawnQuantity = 1;
 
 	/*
 	 * Sets up a pickup actor containing a new item by the given name.
-	 * @param itemName The name of the item to look up in the data table
+	 * @param ItemName The name of the item to look up in the data table
 	 * @param quantity The number of items in this pickup actor
 	 */
 	UFUNCTION(BlueprintCallable)
-	void SetupItemData(FName itemName, int quantity = 1);
+	void SetupItemFromName(FName NewItemName, int NewItemQuantity = 1);
 
-	/*
-	 * Used when the pickup actor is being made from an existing item.
-	 * Such as, a player dropping it from their inventory.
-	 * @param itemData The itemData this actor will represent
-	 * @param quantity The number of items in this pickup actor
-	 */
-	UFUNCTION(BlueprintCallable)
-	void SetupItemFromData(FStItemData itemData, int quantity = 1);
-	
 	UFUNCTION(BlueprintCallable)
 	void OnPickedUp(AActor* targetActor);
 	
 protected:
 	
-	// If the actor fails to validate, this function is called to try again.
-	void CheckForValidity();
-
-	void SetupItemData();
-	
 	virtual void BeginPlay() override;
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	bool bSetupComplete = false;
+private:
 
-	UPROPERTY(Replicated)
-	int m_itemQuantity = 1;
+	void SetupItemData();
 
-	bool m_isOperating = false; // Sets to true to avoid duplication exploits
+	// Used to simulate physics without a huge amount of bandwith use
+	UPROPERTY(Replicated) FTransform m_WorldTransform;
 
-	int m_retryCount = 0;
+	// A pseudo-slot for managing durability, quantity, etc
+	UPROPERTY(Replicated) FStInventorySlot m_Slot = FStInventorySlot();
 	
-	FTimerHandle m_waitTimer;
+	FTimerHandle m_WaitTimer;
+	
+	float m_SphereRadius = 64.0f;
+
+	// Flipped to true while the pickup actor is processing a pickup request
+	bool bIsOperating = false;
 	
 };

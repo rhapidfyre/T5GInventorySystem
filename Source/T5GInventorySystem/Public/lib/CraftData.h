@@ -30,7 +30,7 @@ enum class ECraftingType : uint8
 
 // FCrafterData
 // Contains all data related to an item's data when crafted by a player
-// If the item is NOT crafted, 'itemName' will be None.
+// If the item is NOT crafted, 'ItemName' will be None.
 USTRUCT(BlueprintType)
 struct T5GINVENTORYSYSTEM_API FStCrafterData
 {

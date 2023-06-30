@@ -1,6 +1,8 @@
 
 #include "lib/ItemData.h"
 
+#include "lib/InventorySlot.h"
+
 UDataTable* UItemSystem::getItemDataTable()
 {
     const FSoftObjectPath itemTable = FSoftObjectPath("/T5GInventorySystem/DataTables/DT_ItemData.DT_ItemData");
@@ -35,21 +37,27 @@ FStItemData UItemSystem::getItemDataFromItemName(FName itemName)
 
 bool UItemSystem::getItemNameIsValid(FName itemName, bool performLookup)
 {
-    if (itemName.IsValid())
+    if (itemName.IsNone())
     {
         if (performLookup)
         {
-            const FStItemData itemData = (getItemDataFromItemName(itemName));
-            return (itemData.properName != getInvalidName());
+            const FStItemData ItemData = getItemDataFromItemName(itemName);
+            if ( const UDataTable* dt = getItemDataTable() )
+            {
+                if (IsValid(dt))
+                { 
+                    const FString errorCaught;
+                    const FStItemData* itemDataPtr = dt->FindRow<FStItemData>(itemName, errorCaught);
+                    return (itemDataPtr != nullptr);
+                }
+            }
         }
-        return (itemName != getInvalidName());
+        else
+        {
+            return (itemName != getInvalidName());
+        }
     }
     return false; // Invalid or not found
-}
-
-bool UItemSystem::getItemDataIsValid(FStItemData itemData)
-{
-    return getItemNameIsValid(getItemName(itemData), false);
 }
 
 int UItemSystem::getMaximumStackSize(FName itemName)
@@ -85,12 +93,12 @@ bool UItemSystem::isSameItemName(FName itemOne, FName itemTwo)
     return false;
 }
 
-bool UItemSystem::isItemStackable(FStItemData itemData)
+bool UItemSystem::isItemStackable(const FStItemData& itemData)
 {
     return (itemData.maxStackSize > 1);
 }
 
-bool UItemSystem::isStackable(FName itemName)
+bool UItemSystem::GetIsStackable(FName itemName)
 {
     if (itemName == getInvalidName()) return false;
     return isItemStackable( getItemDataFromItemName(itemName) );
@@ -109,23 +117,22 @@ TArray<EEquipmentSlotType> UItemSystem::getEquipmentSlots(FName itemName)
     return getItemEquipSlots(getItemDataFromItemName(itemName));
 }
 
-bool UItemSystem::isItemActivated(FStItemData itemData)
+bool UItemSystem::isItemActivated(const FStItemData& itemData)
 {
     return (itemData.itemActivation != EItemActivation::NONE);
 }
 
-float UItemSystem::getItemDurability(FStItemData itemData)
+float UItemSystem::getItemDurability(const FStItemData& itemData)
 {
     // New copy of the same item for comparison
-    const FStItemData newItemCopy = getItemDataFromItemName(itemData.properName);
-    if (itemData.currentDurability >= 0.f)
+    if (itemData.MaxDurability >= 0.f)
     {
         // Master item has a valid durability value
-        if (newItemCopy.currentDurability > 0.f)
+        if (itemData.MaxDurability > 0.f)
         {
-            if (newItemCopy.currentDurability < itemData.currentDurability)
-                return newItemCopy.currentDurability;
-            return itemData.currentDurability;
+            if (itemData.MaxDurability < itemData.MaxDurability)
+                return itemData.MaxDurability;
+            return itemData.MaxDurability;
         }
     }
     return -1.f;
@@ -143,12 +150,14 @@ bool UItemSystem::isActivated(FName itemName)
     return isItemActivated( getItemDataFromItemName(itemName) );
 }
 
-bool UItemSystem::isSameItemData(FStItemData itemOne, FStItemData itemTwo)
+bool UItemSystem::IsSameItem(FStInventorySlot& SlotOne, FStInventorySlot& SlotTwo)
 {
-    if (isSameItemName(itemOne.properName, itemTwo.properName))
+    if (isSameItemName(SlotOne.ItemName, SlotTwo.ItemName))
     {
-        // We'll have to do more verification later but this works for now
-        // Check durability, weight, craft quality, etc.
+        if (SlotOne.GetItemData().MaxDurability > 0.f)
+        {
+            return SlotOne.SlotDurability == SlotTwo.SlotDurability;
+        }
         return true;
     }
     return false;

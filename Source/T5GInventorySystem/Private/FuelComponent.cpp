@@ -329,7 +329,7 @@ void UFuelComponent::CreateByProduct(bool &isOverflowing)
 		{
 			if (IsValid(mInventoryStatic))
 			{
-				mInventoryStatic->addItemByName(byProduct.Key, byProduct.Value, true, true, false);
+				mInventoryStatic->AddItemFromDataTable(byProduct.Key, byProduct.Value, true, true, false);
 			}
 			else
 			{
@@ -341,13 +341,11 @@ void UFuelComponent::CreateByProduct(bool &isOverflowing)
 				FActorSpawnParameters spawnParams;
 				spawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
         	
-				FStItemData itemCopy    = UItemSystem::getItemDataFromItemName(byProduct.Key);
-
 				APickupActorBase* pickupItem = GetWorld()->SpawnActorDeferred<APickupActorBase>(
 														APickupActorBase::StaticClass(), spawnTransform);
 				if (IsValid(pickupItem))
 				{
-					pickupItem->SetupItemFromData(itemCopy, byProduct.Value);
+					pickupItem->SetupItemFromName(byProduct.Key, byProduct.Value);
 					pickupItem->FinishSpawning(spawnTransform);
 				}
 			}

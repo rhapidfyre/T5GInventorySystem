@@ -38,16 +38,11 @@ FStFuelData UFuelSystem::getFuelItemFromName(FName itemName)
 
 bool UFuelSystem::getFuelNameIsValid(FName itemName, bool performLookup)
 {
-	if (itemName.IsValid())
+	if (performLookup)
 	{
-		if (performLookup)
-		{
-			const FStItemData itemData = (UItemSystem::getItemDataFromItemName(itemName));
-			return (itemData.properName != UItemSystem::getInvalidName());
-		}
-		return (itemName != UItemSystem::getInvalidName());
+		return UItemSystem::getItemNameIsValid(itemName);
 	}
-	return false; // Invalid or not found
+	return (!itemName.IsNone());
 }
 
 bool UFuelSystem::getFuelItemIsValid(FStFuelData itemData)

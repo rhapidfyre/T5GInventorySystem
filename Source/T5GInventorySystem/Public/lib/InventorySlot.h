@@ -1,12 +1,14 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "ItemData.h"
 #include "InventoryData.h"
 #include "EquipmentData.h"
-#include "EnhancedInput/Public/InputAction.h"
 
 #include "InventorySlot.generated.h"
+
+// fwd declare
+struct FStItemData;
+
 
 USTRUCT(BlueprintType)
 struct T5GINVENTORYSYSTEM_API FStStartingItem
@@ -31,23 +33,34 @@ USTRUCT(BlueprintType)
 struct T5GINVENTORYSYSTEM_API FStInventorySlot
 {
 	GENERATED_BODY()
+
+	FStInventorySlot() {};
+	
+	FStInventorySlot(FName InitItemName, int InitQuantity = 1);
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName ItemName = FName();
 	
 	// The quantity of the item in this slot. Zero means empty.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int slotQuantity = 0;
-
+	int SlotQuantity = 0;
+	
+	// The quantity of the item in this slot. Zero means empty.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UInputAction* inputAction = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FStItemData itemData;
+	float SlotDurability = 0.f;
 
 	// The type of this inventory slot
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	EInventorySlotType slotType = EInventorySlotType::NONE;
+	EInventorySlotType SlotType = EInventorySlotType::NONE;
 
 	// The equipment relationship to this inventory slot
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	EEquipmentSlotType equipType = EEquipmentSlotType::NONE;
+	EEquipmentSlotType EquipType = EEquipmentSlotType::NONE;
+
+	FStItemData GetItemData() const;
+
+	bool IsSlotEmpty() const;
+
+	void EmptyAndResetSlot();
     
 };

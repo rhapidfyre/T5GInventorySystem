@@ -10,9 +10,12 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
-#include "EquipmentData.h"
 
 #include "ItemData.generated.h"
+
+// fwd declare
+struct FStInventorySlot;
+
 
 UENUM(BlueprintType)
 enum class EItemActivation : uint8
@@ -49,9 +52,6 @@ USTRUCT(BlueprintType)
 struct T5GINVENTORYSYSTEM_API FStItemData : public FTableRowBase
 {
 	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FName properName = FName();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FText displayName = FText::FromName(FName());
@@ -83,20 +83,20 @@ struct T5GINVENTORYSYSTEM_API FStItemData : public FTableRowBase
 	float itemWeight = 0.01f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UTexture2D* itemThumbnail = nullptr; //UTexture2D::CreateTransient(32,32);
+	UTexture2D* itemThumbnail = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UStaticMesh* staticMesh = nullptr; //NewObject<UStaticMesh>();
+	UStaticMesh* staticMesh = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	USkeletalMesh* skeletalMesh = nullptr; //NewObject<USkeletalMesh>();
+	USkeletalMesh* skeletalMesh = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FTransform originAdjust;
 
-	// A durability of 0.0 means the item is indestructible
+	// A durability of <= 0.0 means the item is indestructible
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float currentDurability = -1.0f;
+	float MaxDurability = -1.0f;
 
 	// True = Delete on Activation.
 	// False = Never Delete on Activation
@@ -122,22 +122,18 @@ public:
 	// Alternative accessor to getInvalidName().
     UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
 		static FText getInvalidText() { return FText::FromName(FName());}
-
-	// Preferred accessor, in case the variable name is ever changed.
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static FName getItemName(FStItemData itemData) { return itemData.properName; };
 	
 	// Checks if the given item data is a stackable item
 	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static bool isItemStackable(FStItemData itemData);
+		static bool isItemStackable(const FStItemData& itemData);
 
 	// Checks if the item name given is stackable. This uses the data table lookup.
 	// To check an existing item data struct with O(1) lookup, use 'isItemStackable'
 	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static bool isStackable(FName itemName);
+		static bool GetIsStackable(FName itemName);
 
 	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static float getItemWeight(FStItemData itemData) { return itemData.itemWeight; };
+		static float getItemWeight(const FStItemData& itemData) { return itemData.itemWeight; };
 
 	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
 		static float getWeight(FName itemName);
@@ -150,7 +146,7 @@ public:
 	
 	// Checks if the item data is an activated item
 	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static bool isItemActivated(FStItemData itemData);
+		static bool isItemActivated(const FStItemData& itemData);
 
 	// Checks if the item name given is activated. This uses the data table lookup.
 	// To check an existing item data struct with O(1) lookup, use 'isItemActivated'
@@ -159,7 +155,7 @@ public:
 
 	// Gets the max durability of the given item. Negative means indestructible.
 	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static float getItemDurability(FStItemData itemData);
+		static float getItemDurability(const FStItemData& itemData);
 
 	// Gets the max durability for the item given. Uses data table lookup.
 	// To check an existing item data struct with O(1) lookup, use 'getItemMaxDurability'
@@ -183,13 +179,10 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
 		static bool getItemNameIsValid(FName itemName, bool performLookup = false);
-
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static bool getItemDataIsValid(FStItemData itemData);
 	
 	// Takes an existing itemData and returns its stack size.
 	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static int getItemMaxStackSize(FStItemData itemData) { return itemData.maxStackSize; };
+		static int getItemMaxStackSize(const FStItemData& itemData) { return itemData.maxStackSize; };
 	
 	/** Gets the maximum value of identical items that can stack together.
 	 * @param itemName An FName with the text of the item (row name) to look for
@@ -206,6 +199,6 @@ public:
 
 	// Returns true if both item structs are identical and valid
 	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static bool isSameItemData(FStItemData itemOne, FStItemData itemTwo);
+		static bool IsSameItem(FStInventorySlot& SlotOne, FStInventorySlot& SlotTwo);
 
 };
