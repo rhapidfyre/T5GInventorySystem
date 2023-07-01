@@ -25,7 +25,7 @@ public class T5GInventorySystem : ModuleRules
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Core",
+				"Core", "Engine",
 			}
 			);
 			
