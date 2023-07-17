@@ -528,6 +528,8 @@ private: //functions
 
 public: //variables
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bPickupItems = true;
+	
 	// If true, "LogTemp" will display information regarding failures and more. Is true if Verbose is true.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bShowDebug = false;

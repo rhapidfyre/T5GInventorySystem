@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMeshActor.h"
 #include "lib/InventorySlot.h"
@@ -52,10 +53,19 @@ protected:
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	UFUNCTION()
+	virtual void CheckOverlapCall(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
 private:
 
 	void SetupItemData();
 
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	USphereComponent* PickUpDetection;
+
+private:
+	
 	// Used to simulate physics without a huge amount of bandwith use
 	UPROPERTY(Replicated) FTransform m_WorldTransform;
 

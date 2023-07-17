@@ -37,7 +37,7 @@ FStItemData UItemSystem::getItemDataFromItemName(FName itemName)
 
 bool UItemSystem::getItemNameIsValid(FName itemName, bool performLookup)
 {
-    if (itemName.IsNone())
+    if (!itemName.IsNone())
     {
         if (performLookup)
         {

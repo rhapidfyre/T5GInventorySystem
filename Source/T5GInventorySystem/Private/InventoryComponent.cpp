@@ -626,7 +626,7 @@ int UInventoryComponent::AddItemFromExistingSlot(const FStInventorySlot& Invento
 int UInventoryComponent::AddItemFromDataTable(FName ItemName, int quantity, int SlotNumber, bool overflowAdd,
     bool overflowDrop, bool showNotify)
 {
-    if (UItemSystem::getItemNameIsValid(ItemName))
+    if (!UItemSystem::getItemNameIsValid(ItemName))
         return -1;
     
     const FStItemData ItemData = UItemSystem::getItemDataFromItemName(ItemName);

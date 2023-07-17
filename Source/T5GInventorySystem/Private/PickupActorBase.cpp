@@ -16,6 +16,12 @@ APickupActorBase::APickupActorBase()
 	bNetLoadOnClient = true;
 	bReplicates = true;
 
+	PickUpDetection = CreateDefaultSubobject<USphereComponent>("PickupDetection");
+	PickUpDetection->SetupAttachment(GetStaticMeshComponent());
+	PickUpDetection->InitSphereRadius(48.0);
+	PickUpDetection->bAutoActivate = true;
+	PickUpDetection->SetSphereRadius(48.0);
+	
 	SetMobility(EComponentMobility::Movable);
 	
 }
@@ -28,6 +34,7 @@ void APickupActorBase::GetLifetimeReplicatedProps(TArray< class FLifetimePropert
 	
 	// Ensures that the 'worldTransform' replicates to everyone via multicast
 	DOREPLIFETIME(APickupActorBase, m_Slot);
+	DOREPLIFETIME(APickupActorBase, m_WorldTransform);
     
 }
 
@@ -68,9 +75,39 @@ void APickupActorBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+void APickupActorBase::CheckOverlapCall(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (HasAuthority())
+	{
+		if (IsValid(OtherActor))
+		{
+			OnPickedUp(OtherActor);
+		}
+	}
+}
+
 void APickupActorBase::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	UStaticMeshComponent* sMesh = GetStaticMeshComponent();
+	if (IsValid(sMesh))
+	{
+		sMesh->SetSimulatePhysics(HasAuthority());
+		sMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+		sMesh->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
+		sMesh->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+		sMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+		sMesh->SetCollisionResponseToChannel(ECC_EngineTraceChannel3, ECR_Ignore);
+		sMesh->SetCollisionResponseToChannel(ECC_Destructible, ECR_Ignore);
+		
+		if (IsValid(PickUpDetection) && HasAuthority())
+		{
+			if (!PickUpDetection->OnComponentBeginOverlap.IsAlreadyBound(this, &APickupActorBase::CheckOverlapCall))
+				 PickUpDetection->OnComponentBeginOverlap.AddDynamic(this, &APickupActorBase::CheckOverlapCall);
+		}
+	}
 }
 
 void APickupActorBase::SetupItemData()
@@ -133,15 +170,18 @@ void APickupActorBase::OnPickedUp(AActor* targetActor)
 			const ACharacter* playerRef = Cast<ACharacter>(targetActor);
 			if (IsValid(playerRef))
 			{
-				UE_LOG(LogTemp, Display, TEXT("%s(%s): Target Actor is a Player"), *GetName(),
+				UE_LOG(LogTemp, Display, TEXT("%s(%s): Target Actor is a Character"), *GetName(),
 					(HasAuthority()?TEXT("SRV"):TEXT("CLI")));
 				UInventoryComponent* invComp = targetActor->FindComponentByClass<UInventoryComponent>();
 				if (IsValid(invComp))
 				{
+					if (!invComp->bPickupItems)
+						return;
+					
 					UE_LOG(LogTemp, Display, TEXT("%s(%s): Adding Item x%d of '%s'"), *GetName(),
 						(HasAuthority()?TEXT("SRV"):TEXT("CLI")), m_Slot.SlotQuantity, *(m_Slot.ItemName).ToString() );
 					int itemsAdded = invComp->AddItemFromDataTable(m_Slot.ItemName,
-								m_Slot.SlotQuantity, true, true, true);
+								m_Slot.SlotQuantity, -1, true, true);
 					if (itemsAdded >= 0)
 					{
 						if (itemsAdded >= m_Slot.SlotQuantity)
