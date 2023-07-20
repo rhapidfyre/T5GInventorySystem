@@ -731,7 +731,7 @@ bool UInventoryComponent::donEquipment(UInventoryComponent* fromInventory, int f
         m_equipmentSlots[slotNumber].ItemName = fromInventory->getItemNameInSlot(fromSlot);
         const int itemsRemoved = fromInventory->removeItemFromSlot(fromSlot, INT_MAX, false, false, false, true);
         m_equipmentSlots[slotNumber].SlotQuantity = itemsRemoved;
-        InventoryUpdate(slotNumber, true);
+        //InventoryUpdate(slotNumber, true);
         return true;
     }
     
@@ -838,7 +838,7 @@ int UInventoryComponent::removeItemFromSlot(int slotNumber, int quantity, bool i
                     else             m_inventorySlots[slotNumber].ItemName = FName();
                 }
 
-                InventoryUpdate(slotNumber, isEquipment);
+                //InventoryUpdate(slotNumber, isEquipment);
                 return qty;
             }
         }
@@ -1038,23 +1038,19 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
 
 /**
  * @deprecated 
- * @brief Update each slot one by one. Never use a sweeping update.
+ * @brief Update each slot one by one
  */
 void UInventoryComponent::OnRep_InventorySlotUpdated() const
 {
-    UE_LOG(LogTemp, Warning, TEXT("InventoryComponent(%s): OnRep_InventorySlotUpdated() - This should really be removed."),
-            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
     OnInventoryUpdated.Broadcast(-1, false);
 }
 
 /**
  * @deprecated 
- * @brief Update each slot one by one. Never use a sweeping update.
+ * @brief Update each slot one by one
  */
 void UInventoryComponent::OnRep_EquipmentSlotUpdated() const
 {
-    UE_LOG(LogTemp, Warning, TEXT("InventoryComponent(%s): OnRep_EquipmentSlotUpdated() - This should really be removed."),
-            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
     OnInventoryUpdated.Broadcast(-1, true);
 }
 
@@ -1144,7 +1140,7 @@ int UInventoryComponent::increaseQuantityInSlot(int slotNumber, int quantity, in
         {
             sendNotification(getItemNameInSlot(slotNumber), amountAdded);
         }
-        InventoryUpdate(slotNumber);
+        //InventoryUpdate(slotNumber);
         return amountAdded;
     }
     return -1;
@@ -1183,7 +1179,7 @@ int UInventoryComponent::decreaseQuantityInSlot(int slotNumber, int quantity, in
             ReferenceSlot.EmptyAndResetSlot();
         }
         
-        InventoryUpdate(slotNumber);
+        //InventoryUpdate(slotNumber);
         return amountRemoved;
     }
     return -1;
@@ -1246,7 +1242,7 @@ void UInventoryComponent::resetInventorySlot(int slotNumber)
             GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
     }
     removeItemFromSlot(slotNumber, 1, false,true);
-    InventoryUpdate(slotNumber);
+    //InventoryUpdate(slotNumber);
 }
 
 void UInventoryComponent::InventoryUpdate(int slotNumber, bool isEquipment, bool isAtomic)
