@@ -5,6 +5,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerState.h"
 #include "Net/UnrealNetwork.h" // Used for replication
+#include "TalesDungeoneer/Characters/CharacterBase.h"
 
 
 void UInventoryComponent::BeginPlay()
@@ -54,12 +55,10 @@ UInventoryComponent::UInventoryComponent()
 
 void UInventoryComponent::InitializeInventory()
 {
-    if (bShowDebug)
-    {
-        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): InitializeInventory()"),
-            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
-    }
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: InitializeInventory"));
+	ACharacterBase* OwnerCharacter = Cast<ACharacterBase>(GetOwner());
+	if (!IsValid(OwnerCharacter))
+		return;
+	
     // Ensure the number of inventory slots is valid. If we added an inventory system,
     // it should at least have *one* slot at minimum. Otherwise, wtf is the point?
     if (NumberOfInvSlots < 1) NumberOfInvSlots = 6;
@@ -73,9 +72,12 @@ void UInventoryComponent::InitializeInventory()
     {
         FStInventorySlot newSlot;
         newSlot.SlotType = EInventorySlotType::GENERAL;
-
         m_inventorySlots.Add(newSlot);
     }
+	UE_LOG(LogTemp, Display, TEXT("%s(%s): Initialized Inventory with %d Slots"),
+		*OwnerCharacter->GetName(),
+		OwnerCharacter->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
+		m_inventorySlots.Num());
 
     // Setup Equipment Slots
     for (int i = 0; i < EligibleEquipmentSlots.Num(); i++)
@@ -96,11 +98,19 @@ void UInventoryComponent::InitializeInventory()
             }
         }
     }
+	UE_LOG(LogTemp, Display, TEXT("%s(%s): Initialized Equipment with %d Slots"),
+		*OwnerCharacter->GetName(),
+		OwnerCharacter->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
+		m_equipmentSlots.Num());
     
     if (IsValid(GetOwner()))
     {
         if (GetOwner()->HasAuthority())
         {
+        	UE_LOG(LogTemp, Display, TEXT("%s(%s): Found %d Starting Items"),
+				*OwnerCharacter->GetName(),
+				OwnerCharacter->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
+				StartingItems.Num());
             while (!StartingItems.IsEmpty())
             {
                 if (StartingItems.IsValidIndex(0))
@@ -129,6 +139,13 @@ void UInventoryComponent::InitializeInventory()
                             UE_LOG(LogTemp, Warning, TEXT("%s(%s): Item(s) failed to add (StartingItem = %s)"),
                                 *GetName(), GetOwner()->HasAuthority()?TEXT("SRV"):TEXT("CLI"), *itemName.ToString());
                         }
+                    	else
+                    	{
+                    		UE_LOG(LogTemp, Display, TEXT("%s(%s): Added %d of starting item '%s'"),
+								*OwnerCharacter->GetName(),
+								OwnerCharacter->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
+								itemsAdded, *itemName.ToString());
+                    	}
                     }
 
                     StartingItems.RemoveAt(0);
@@ -149,8 +166,8 @@ void UInventoryComponent::OnComponentCreated()
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: OnComponentCreated"));
     Super::OnComponentCreated();
     RegisterComponent();
-    InitializeInventory();
-    if (bVerboseOutput) bShowDebug = true;
+    if (bVerboseOutput)
+    	bShowDebug = true;
 }
 
 FStItemData UInventoryComponent::getItemInSlot(int slotNumber, bool isEquipment)
