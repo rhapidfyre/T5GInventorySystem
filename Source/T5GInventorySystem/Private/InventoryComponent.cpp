@@ -39,101 +39,118 @@ void UInventoryComponent::BeginPlay()
         UE_LOG(LogEngine, Display, TEXT("%s(%s): Data Table Was Found"),
             *GetName(), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
     }
-    m_bIsInventoryReady = true;
 }
 
 UInventoryComponent::UInventoryComponent()
 {
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: Constructor"));
-    // Inventory Component doesn't need to tick
-    // It will be updated as needed
     PrimaryComponentTick.bCanEverTick = false;
     SetIsReplicatedByDefault(true);
-    // ReSharper disable once CppVirtualFunctionCallInsideCtor
     SetAutoActivate(true);
 }
 
+/*
+ * Runs the initialization after UE has created the UObject system.
+ * Sets up the stuff for the inventory that can't be done before the game is running.
+ */
 void UInventoryComponent::InitializeInventory()
 {
-	ACharacterBase* OwnerCharacter = Cast<ACharacterBase>(GetOwner());
-	if (!IsValid(OwnerCharacter))
-		return;
+	// Clients cannot initialize inventories
+	if (GetNetMode() < NM_Client)
+	{
+		ACharacterBase* OwnerCharacter = Cast<ACharacterBase>(GetOwner());
+		if (!IsValid(OwnerCharacter))
+			return;
 	
-    // Ensure the number of inventory slots is valid. If we added an inventory system,
-    // it should at least have *one* slot at minimum. Otherwise, wtf is the point?
-    if (NumberOfInvSlots < 1) NumberOfInvSlots = 6;
-    
-    m_inventorySlots.Empty();
-    m_equipmentSlots.Empty();
-    m_notifications.Empty();
-    
-    // Setup Inventory Slots
-    for (int i = 0; i < NumberOfInvSlots; i++)
-    {
-        FStInventorySlot newSlot;
-        newSlot.SlotType = EInventorySlotType::GENERAL;
-        m_inventorySlots.Add(newSlot);
-    }
-	UE_LOG(LogTemp, Display, TEXT("%s(%s): Initialized Inventory with %d Slots"),
-		*OwnerCharacter->GetName(),
-		OwnerCharacter->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
-		m_inventorySlots.Num());
+		// Only needs to be initialized once
+		if (isInventoryReady())
+			return;
+		
+    	// Ensure the number of inventory slots is valid. If we added an inventory system,
+    	// it should at least have *one* slot at minimum. Otherwise, wtf is the point?
+    	if (NumberOfInvSlots < 1)
+    		NumberOfInvSlots = 6;
+    	
+    	m_inventorySlots.Empty();
+    	m_equipmentSlots.Empty();
+    	m_notifications.Empty();
+    	
+    	// Setup Inventory Slots
+    	for (int i = 0; i < NumberOfInvSlots; i++)
+    	{
+    	    FStInventorySlot newSlot;
+    	    newSlot.SlotType = EInventorySlotType::GENERAL;
+    	    m_inventorySlots.Add(newSlot);
+    		OnInventoryUpdated.Broadcast(i);
+    	}
+	
+    	// Setup Equipment Slots
+    	for (int i = 0; i < EligibleEquipmentSlots.Num(); i++)
+    	{
+    	    if (EligibleEquipmentSlots.IsValidIndex(i))
+    	    {
+    	        if (EligibleEquipmentSlots[i] != EEquipmentSlotType::NONE)
+    	        {
+    	            // Ignore slots already added - There can be only one..
+    	            if (getEquipmentSlotNumber(EligibleEquipmentSlots[i]) < 0)
+    	            {
+    	                FStInventorySlot newSlot;
+    	                newSlot.SlotType  = EInventorySlotType::EQUIP;
+    	                newSlot.EquipType = EligibleEquipmentSlots[i];
+    	                m_equipmentSlots.Add(newSlot);
+    	            	OnEquipmentUpdated.Broadcast(EligibleEquipmentSlots[i]);
+    	            }
+    	        }
+    	    }
+    	}
 
-    // Setup Equipment Slots
-    for (int i = 0; i < EligibleEquipmentSlots.Num(); i++)
-    {
-        if (EligibleEquipmentSlots.IsValidIndex(i))
-        {
-            if (EligibleEquipmentSlots[i] != EEquipmentSlotType::NONE)
-            {
-                // Ignore slots already added - There can be only one..
-                if (getEquipmentSlotNumber(EligibleEquipmentSlots[i]) < 0)
-                {
-                    FStInventorySlot newSlot;
-                    newSlot.SlotType  = EInventorySlotType::EQUIP;
-                    newSlot.EquipType = EligibleEquipmentSlots[i];
-                    //UE_LOG(LogTemp, Display, TEXT("Adding new equipment slot @ %d"), i);
-                    m_equipmentSlots.Add(newSlot);
-                }
-            }
-        }
-    }
-	UE_LOG(LogTemp, Display, TEXT("%s(%s): Initialized Equipment with %d Slots"),
-		*OwnerCharacter->GetName(),
-		OwnerCharacter->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
-		m_equipmentSlots.Num());
-    
-    if (IsValid(GetOwner()))
-    {
-        if (GetOwner()->HasAuthority())
-        {
+		/** TODO
+		 * Starting items should be replaced entirely by save files or first-login scripts.
+		 * Starting items will only happen once - The first time a character is created.
+		 */
+		
+		// If the inventory component has a proper actor-owner, proceed
+    	if (IsValid(GetOwner()))
+    	{
+    		
         	UE_LOG(LogTemp, Display, TEXT("%s(%s): Found %d Starting Items"),
 				*OwnerCharacter->GetName(),
 				OwnerCharacter->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
 				StartingItems.Num());
-            while (!StartingItems.IsEmpty())
+    		
+            for (int i = 0; i < StartingItems.Num(); i++)
             {
-                if (StartingItems.IsValidIndex(0))
+                if (StartingItems.IsValidIndex(i))
                 {
                     // Determine the starting item by item name given
-                    const FName itemName = StartingItems[0].startingItem;
-                    int slotNum          = -1;
-                    if (StartingItems[0].equipType != EEquipmentSlotType::NONE)
+                    const FName itemName = StartingItems[i].startingItem;
+                    int slotNum = -1;
+
+                	// The item is set to start in a specific equipment slot
+                    if (StartingItems[i].equipType != EEquipmentSlotType::NONE)
                     {
                         if (slotNum < 0)
                         {
-                            slotNum = getEquipmentSlotNumber(StartingItems[0].equipType);
+                            slotNum = getEquipmentSlotNumber(StartingItems[i].equipType);
                         }
                         if (slotNum >= 0)
                         {
+                        	// TODO - A check should be added here to ensure the item
+                        	//        is being added to an appropriate slot.
                             m_equipmentSlots[slotNum].ItemName = itemName;
-                            m_equipmentSlots[slotNum].SlotQuantity = StartingItems[0].quantity;
+                        	m_equipmentSlots[slotNum].SlotQuantity = StartingItems[i].quantity;
+
+                        	// If we are the server, we don't receive the "OnRep" call,
+                        	//    so the broadcast needs to be called manually.
+                        	if (GetNetMode() < NM_Client)
+                        		OnEquipmentUpdated.Broadcast(m_equipmentSlots[slotNum].EquipType);
                         }
                     }
+                	// The item is not set to start in a specific inventory slot
                     else
                     {
-                        const int itemsAdded = AddItemFromDataTable(itemName, StartingItems[0].quantity,
-                                            slotNum, false, false, false);
+                        const int itemsAdded = AddItemFromDataTable(itemName,
+                        	StartingItems[i].quantity, slotNum,
+                        	false, false, false);
                         if (itemsAdded < 1)
                         {
                             UE_LOG(LogTemp, Warning, TEXT("%s(%s): Item(s) failed to add (StartingItem = %s)"),
@@ -147,13 +164,12 @@ void UInventoryComponent::InitializeInventory()
 								itemsAdded, *itemName.ToString());
                     	}
                     }
-
-                    StartingItems.RemoveAt(0);
                 }
             }
-        }
-    }
-
+    	}//is owner valid (starting items)
+		m_bIsInventoryReady = true;
+    }//isServer
+    
 }
 
 void UInventoryComponent::OnComponentCreated()
@@ -170,6 +186,12 @@ void UInventoryComponent::OnComponentCreated()
     	bShowDebug = true;
 }
 
+/**
+ * Returns the item found in the given slot.
+ * @param slotNumber An int representing the inventory slot requested
+ * @param isEquipment True if this should check for an EQUIPMENT slot. False by default.
+ * @return Returns a copy of the found FStItemData or an invalid item
+ */
 FStItemData UInventoryComponent::getItemInSlot(int slotNumber, bool isEquipment)
 {
     if (bShowDebug)
@@ -186,6 +208,12 @@ FStItemData UInventoryComponent::getItemInSlot(int slotNumber, bool isEquipment)
     return FStItemData();
 }
 
+/**
+ * Returns the inventory enum slot type of the given slot number. Returns NONE
+ * if the slot is invalid or the slot is not an inventory slot.
+ * @param slotNumber The slot number for the inventory slot inquiry
+ * @return The inventory slot type enum, where NONE indicates failure.
+ */
 EInventorySlotType UInventoryComponent::getInventorySlotType(int slotNumber)
 {
     if (bShowDebug)
@@ -199,6 +227,12 @@ EInventorySlotType UInventoryComponent::getInventorySlotType(int slotNumber)
     return EInventorySlotType::NONE;
 }
 
+/**
+ * Returns the equipment enum slot type of the given slot number. Returns NONE
+ * if the slot is invalid or the slot is not an equipment slot.
+ * @param slotNumber The slot number for the equipment slot inquiry
+ * @return The equip slot type enum, where NONE indicates failure.
+ */
 EEquipmentSlotType UInventoryComponent::getEquipmentSlotType(int slotNumber)
 {
     if (bShowDebug)
@@ -211,6 +245,11 @@ EEquipmentSlotType UInventoryComponent::getEquipmentSlotType(int slotNumber)
     return EEquipmentSlotType::NONE;
 }
 
+/**
+ * Returns the total quantity of an item in the entire inventory, NOT including equipment slots.
+ * @param itemName The itemName of the item we're searching for.
+ * @return The total quantity of items found. Negative value indicates failure.
+ */
 int UInventoryComponent::getTotalQuantityInAllSlots(FName itemName)
 {
     if (bShowDebug)
@@ -231,6 +270,10 @@ int UInventoryComponent::getTotalQuantityInAllSlots(FName itemName)
     return total;
 }
 
+/**
+ * Returns the slotNumber of the first empty slot found in the inventory.
+ * @return The slotNumber of the first empty slot. Negative indicates full inventory.
+ */
 int UInventoryComponent::GetFirstEmptySlot()
 {
     if (bShowDebug)
@@ -247,6 +290,11 @@ int UInventoryComponent::GetFirstEmptySlot()
     return -1;
 }
 
+/**
+ * Returns the total weight of all items in the inventory.
+ * @param incEquip If true, the total weight will also include all equipment slots. False by default.
+ * @return Float containing the total weight of the inventory. Unitless.
+ */
 float UInventoryComponent::getTotalWeight(bool incEquip)
 {
     if (bShowDebug)
@@ -265,6 +313,11 @@ float UInventoryComponent::getTotalWeight(bool incEquip)
     return totalWeight;
 }
 
+/**
+ * Gets the total weight of all items in the given slot.
+ * @param slotNumber The int representing the inventory slot to check.
+ * @return Float with the total weight of the given slot. Negative indicates failure. Zero indicates empty slot.
+ */
 float UInventoryComponent::getWeightInSlot(int slotNumber)
 {
     if (bShowDebug)
@@ -281,6 +334,11 @@ float UInventoryComponent::getWeightInSlot(int slotNumber)
     return 0.0f;
 }
 
+/**
+ * Returns a TArray of int ints where the item was found
+ * @param itemName The item we're looking for
+ * @return TArray of ints. Empty Array indicates no items found.
+ */
 TArray<int> UInventoryComponent::getSlotsContainingItem(FName itemName)
 {   
     if (bShowDebug)
@@ -303,6 +361,12 @@ TArray<int> UInventoryComponent::getSlotsContainingItem(FName itemName)
     return foundSlots;
 }
 
+/**
+ * Returns a reference to the slot data for the slot requested.
+ * @param slotNumber An int representing the inventory slot
+ * @param IsEquipment True if the slot is an equipment slot
+ * @return FStSlotContents of the found slot. Returns default struct if slot is empty or not found.
+ */
 FStInventorySlot& UInventoryComponent::GetInventorySlot(int slotNumber, bool IsEquipmentSlot)
 {
     if (bShowDebug)
@@ -315,6 +379,11 @@ FStInventorySlot& UInventoryComponent::GetInventorySlot(int slotNumber, bool IsE
     return IsEquipmentSlot ? m_equipmentSlots[slotNumber] : m_inventorySlots[slotNumber];
 }
 
+/**
+ * Gets the index (slot) of the equipment slot where equipment type was found.
+ * @param equipEnum Enum of the slotType to find.
+ * @return Int representing the slot number found. Negative indicates failure.
+ */
 int UInventoryComponent::getEquipmentSlotNumber(EEquipmentSlotType equipEnum)
 {
     if (bShowDebug)
@@ -326,7 +395,8 @@ int UInventoryComponent::getEquipmentSlotNumber(EEquipmentSlotType equipEnum)
     if (equipEnum != EEquipmentSlotType::NONE)
     {
         // Loop through until we find the equip slot since we only have 1 of each
-        for (int i = 0; i < getNumEquipmentSlots(); i++)
+    	const int numEquipSlots = getNumEquipmentSlots();
+        for (int i = 0; i < numEquipSlots; i++)
         {
             const FStInventorySlot equipSlot = getEquipmentSlotByNumber(i);
             if (equipSlot.EquipType == equipEnum)
@@ -338,6 +408,12 @@ int UInventoryComponent::getEquipmentSlotNumber(EEquipmentSlotType equipEnum)
     return -1;
 }
 
+/**
+ * DEPRECATED - Use GetInventorySlot
+ * @deprecated Use GetInventorySlot(SlotNumber, true)
+ * @param equipEnum Enum of the slotType to find.
+ * @return A copy of an FStEquipmentSlot struct that was found.
+ */
 FStInventorySlot UInventoryComponent::getEquipmentSlot(EEquipmentSlotType equipEnum)
 {
     if (bShowDebug)
@@ -360,6 +436,11 @@ FStInventorySlot UInventoryComponent::getEquipmentSlot(EEquipmentSlotType equipE
     return FStInventorySlot();
 }
 
+/**
+ * Finds the given equipment slot by specific slot number
+ * @param slotNumber Represents the slot of 'm_equipmentSlots' to be examined.
+ * @return FStEquipmentSlot representing the slot found. Check 'FStEquipmentSlot.slotType = NONE' for failure
+ */
 FStInventorySlot UInventoryComponent::getEquipmentSlotByNumber(int slotNumber)
 {
     if (bShowDebug)
@@ -373,6 +454,12 @@ FStInventorySlot UInventoryComponent::getEquipmentSlotByNumber(int slotNumber)
     return FStInventorySlot();
 }
 
+/**
+ * Returns the truth of whether the requested slot is a real inventory slot or not.
+ * @param slotNumber An int int of the slot being requested
+ * @poaram IsEquipmentSlot True if checking an equipment slot
+ * @return Boolean
+ */
 bool UInventoryComponent::IsValidSlot(int slotNumber, bool IsEquipmentSlot)
 {
     if (bShowDebug)
@@ -384,6 +471,12 @@ bool UInventoryComponent::IsValidSlot(int slotNumber, bool IsEquipmentSlot)
         return (m_equipmentSlots.IsValidIndex(slotNumber));
     return (m_inventorySlots.IsValidIndex(slotNumber));
 }
+
+/**
+ * Returns the truth of whether the requested slot is a real equipment slot or not.
+ * @param slotNumber The slot being requested
+ * @return Boolean
+ */
 bool UInventoryComponent::isValidEquipmentSlot(int slotNumber)
 {
     if (bShowDebug)
@@ -393,6 +486,13 @@ bool UInventoryComponent::isValidEquipmentSlot(int slotNumber)
     }
     return (m_equipmentSlots.IsValidIndex(slotNumber));
 }
+
+/**
+ * (overload) Returns the truth of whether the requested slot is a real equipment slot or not.
+ * Not preferred, as the int version of this function is O(1)
+ * @param equipSlot The equip slot enum to look for ( O(n) lookup )
+ * @return Truth of outcome
+ */
 bool UInventoryComponent::isValidEquipmentSlotEnum(EEquipmentSlotType equipSlot)
 {
     //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: isValidEquipmentSlotEnum"));
@@ -407,6 +507,13 @@ bool UInventoryComponent::isValidEquipmentSlotEnum(EEquipmentSlotType equipSlot)
     return false;
 }
 
+/**
+ * Returns the truth of whether the requested slot is empty.
+ * Performs IsValidSlot() internally. No need to call both functions.
+ * @param slotNumber The slot number to check.
+ * @param isEquipment If true, checks equipment slots. If false, checks inventory slots.
+ * @return If true, the slot is vacant.
+ */
 bool UInventoryComponent::isEmptySlot(int slotNumber, bool isEquipment)
 {
     if (bShowDebug)
@@ -419,6 +526,12 @@ bool UInventoryComponent::isEmptySlot(int slotNumber, bool isEquipment)
     return (getQuantityInSlot(slotNumber, isEquipment) < 1);
 }
 
+/**
+ * Returns the truth of whether the requested slot is empty.
+ * Performs IsValidSlot() internally. No need to call both functions.
+ * @param equipSlot The Equip enum for the slot we're checking.
+ * @return True if the equipment slot is unoccupied.
+ */
 bool UInventoryComponent::isEquipmentSlotEmpty(EEquipmentSlotType equipSlot)
 {
     if (bShowDebug)
@@ -435,6 +548,12 @@ bool UInventoryComponent::isEquipmentSlotEmpty(EEquipmentSlotType equipSlot)
     return false;
 }
 
+/**
+ * Gets the name of the item that resides in the requested inventory slot.
+ * @param slotNumber an int int representing the slot number requested
+ * @param isEquipment True if looking for an equipment slot
+ * @return FName the itemName of the item in slot. Returns 'invalidName' if empty or nonexistent.
+ */
 FName UInventoryComponent::getItemNameInSlot(int slotNumber, bool isEquipment)
 {
     if (bShowDebug)
@@ -446,6 +565,12 @@ FName UInventoryComponent::getItemNameInSlot(int slotNumber, bool isEquipment)
     return InventorySlot.ItemName;
 }
 
+/**
+ * Retrieves the quantity of the item in the given slot.
+ * @param slotNumber The int int representing the slot number being requested
+ * @param isEquipment True if the slot is an equipment slot.
+ * @return Int of the slot number. Negative indicates failure.
+ */
 int UInventoryComponent::getQuantityInSlot(int slotNumber, bool isEquipment)
 {
     if (bShowDebug)
@@ -558,6 +683,11 @@ int UInventoryComponent::AddItemFromExistingSlot(const FStInventorySlot& Invento
                 m_inventorySlots[SlotNumber].ItemName     = InventorySlot.ItemName;
                 m_inventorySlots[SlotNumber].SlotQuantity = NewQuantity > MaxStackSize ? MaxStackSize : NewQuantity;
 
+            	// If we are the server, we don't receive the "OnRep" call,
+            	//    so the broadcast needs to be called manually.
+            	if (GetNetMode() < NM_Client)
+            		OnInventoryUpdated.Broadcast(SlotNumber);
+            	
                 // The current quantity minus the original quantity is how many items were added
                 RemainingQuantity -= (m_inventorySlots[SlotNumber].SlotQuantity - QuantityInSlot);
             }
@@ -678,7 +808,12 @@ int UInventoryComponent::AddItemFromDataTable(FName ItemName, int quantity, int 
     return RemainingQuantity;
 }
 
-// Public accessor version of 'GetInventorySlot', but returns a copy instead of a reference.
+/** Returns a copy of the slot data for the slot requested.
+ * Public accessor version of 'GetInventorySlot', but returns a copy instead of a reference.
+ * @param slotNumber An int representing the inventory slot
+ * @param IsEquipment True if the slot is an equipment slot
+ * @return FStSlotContents of the found slot. Returns default struct if slot is empty or not found.
+ */
 FStInventorySlot UInventoryComponent::GetCopyOfSlot(int slotNumber, bool IsEquipment)
 {
     if (bShowDebug)
@@ -703,7 +838,15 @@ FStInventorySlot UInventoryComponent::GetCopyOfSlot(int slotNumber, bool IsEquip
     return FStInventorySlot();
 }
 
-
+/**
+ * Attempts to read the item from the provided slot, and if it is a valid
+ * target for equipping, it will don the equipment to the appropriate slot.
+ *
+ * @param fromInventory The inventory we are equipping the item from.
+ * @param fromSlot The slot where the item reference can be found
+ * @param toSlot (optional) If not NONE it will equip the item directly to this slot.
+ * @return True if the item was added successfully
+ */
 bool UInventoryComponent::donEquipment(UInventoryComponent* fromInventory, int fromSlot, EEquipmentSlotType eSlot)
 {
     if (bShowDebug)
@@ -747,14 +890,29 @@ bool UInventoryComponent::donEquipment(UInventoryComponent* fromInventory, int f
 
         m_equipmentSlots[slotNumber].ItemName = fromInventory->getItemNameInSlot(fromSlot);
         const int itemsRemoved = fromInventory->removeItemFromSlot(fromSlot, INT_MAX, false, false, false, true);
-        m_equipmentSlots[slotNumber].SlotQuantity = itemsRemoved;
-        //InventoryUpdate(slotNumber, true);
+    	m_equipmentSlots[slotNumber].SlotQuantity = itemsRemoved;
+
+    	// If we are the server, we don't receive the "OnRep" call,
+    	//    so the broadcast needs to be called manually.
+    	if (GetNetMode() < NM_Client)
+    		OnEquipmentUpdated.Broadcast(equipSlot);
         return true;
     }
     
     return false;
 }
 
+/**
+* Unequip a piece of equipment. Provides an argument for destroying the item,
+* instead of returning it to the inventory (such as a sword being destroy). If
+* the item isn't destroyed, it gets moved to the requested slot.
+*
+* @param equipSlot The slot to remove the item from. 
+* @param slotNumber Which slot to put the doffed equipment into.
+* @param destroyResult If true, the item will be destroyed. If false, moved into the inventory.
+* @param toInventory (optional) The inventory to doff the equipment into.
+* @return True if the operation succeeded with the given parameters
+*/
 bool UInventoryComponent::doffEquipment(EEquipmentSlotType equipSlot, int slotNumber, UInventoryComponent* toInventory, bool destroyResult)
 {
     if (bShowDebug)
@@ -794,7 +952,19 @@ bool UInventoryComponent::doffEquipment(EEquipmentSlotType equipSlot, int slotNu
     return false;
 }
 
-
+/**
+* Removes a quantity of the item in the requested inventory slot. Verifications should
+* be performed before running this function. This function will remove whatever is in the slot
+* with the given parameters. It does not perform name/type verification.
+*
+* @param slotNumber Which slot we are taking an item away from
+* @param quantity How many to remove. Defaults to 1. If amount exceeds quantity, will set removeAll to true.
+* @param isEquipment True if the slot is an equipment slot.
+* @param showNotify True if the player should get a notification.
+* @param dropToGround If the remove is successful, the item will fall to the ground (spawns a pickup item)
+* @param removeAll If true, removes all of the item in the slot, making the slot empty.
+* @return The number of items actually removed. Negative indicates failure.
+*/
 int UInventoryComponent::removeItemFromSlot(int slotNumber, int quantity, bool isEquipment, bool showNotify, bool dropToGround, bool removeAll)
 {
     if (bShowDebug)
@@ -855,7 +1025,15 @@ int UInventoryComponent::removeItemFromSlot(int slotNumber, int quantity, bool i
                     else             m_inventorySlots[slotNumber].ItemName = FName();
                 }
 
-                //InventoryUpdate(slotNumber, isEquipment);
+            	// If we are the server, we don't receive the "OnRep" call,
+            	//    so the broadcast needs to be called manually.
+            	if (GetNetMode() < NM_Client)
+            	{
+            		if (isEquipment)
+            			OnEquipmentUpdated.Broadcast(getEquipmentSlotType(slotNumber));
+            		else
+            			OnInventoryUpdated.Broadcast(slotNumber);
+				}
                 return qty;
             }
         }
@@ -863,6 +1041,18 @@ int UInventoryComponent::removeItemFromSlot(int slotNumber, int quantity, bool i
     return -1;
 }
 
+/**
+* Starting from the first slot where the item is found, removes the given quantity of
+* the given ItemName until all of the item has been removed or the removal quantity
+* has been reached (inclusive).
+*
+* @param itemName The name of the item we are wanting to remove from the inventory
+* @param quantity How many to remove. Defaults to 1. If amount exceeds quantity, will set removeAll to true.
+* @param isEquipment True if this is an equipment slot. False by default.
+* @param dropToGround If true, spawns a pickup for the item removed at the total quantity removed.
+* @param removeAll If true, removes ALL occurrence of the item in the entire inventory.
+* @return The total number of items successfully removed. Negative indicates failure.
+*/
 int UInventoryComponent::removeItemByQuantity(FName itemName, int quantity, bool isEquipment, bool dropToGround, bool removeAll)
 {
     if (bShowDebug)
@@ -894,6 +1084,19 @@ int UInventoryComponent::removeItemByQuantity(FName itemName, int quantity, bool
     return -1;
 }
 
+/**
+* Performs a swap where the destination slot is another slot. If the items are the same, it will
+* stack items FROM the original spot on top of the items in the TO slot. For example, both slots
+* contain carrots. Two different FStItemData, but they are effectively the same item. These will stack instead of swap.
+* 
+* @param fromInventory A pointer to the UInventoryComponent* the item is being moved FROM. Nullptr uses this inventory.
+* @param fromSlotNum The slot number of the FROM inventory
+* @param toSlotNum The slot number of this inventory to swap with or stack into.
+* @param quantity The quantity to move. Values less tan 1 signify to move the entire slot's stack.
+* @param showNotify True if a notification should be shown to both inventory owners.
+* @param isEquipmentSlot True if the TO slot is an EQUIPMENT slot. False means INVENTORY slot.
+* @param fromEquipmentSlot True if the FROM slot is an EQUIPMENT slot. False means INVENTORY slot.
+*/
 bool UInventoryComponent::swapOrStackSlots(UInventoryComponent* fromInventory, int fromSlotNum, int toSlotNum, int quantity, bool showNotify, bool isEquipmentSlot, bool fromEquipmentSlot)
 {
     if (bShowDebug)
@@ -905,7 +1108,20 @@ bool UInventoryComponent::swapOrStackSlots(UInventoryComponent* fromInventory, i
     return swapOrStackWithRemainder(fromInventory, fromSlotNum, toSlotNum, quantity, remainder, showNotify, isEquipmentSlot, fromEquipmentSlot);
 }
 
-
+/**
+* (overload) Performs a swap-or-stack where the destination slot is another slot. If the items are the same, it will
+* stack items FROM the original spot on top of the items in the TO slot. For example, both slots
+* contain carrots. Two different FStItemData, but they are effectively the same item. These will stack instead of swap.
+* 
+* @param fromInventory A pointer to the UInventoryComponent* the item is being moved FROM. Nullptr uses this inventory.
+* @param fromSlotNum The slot number of the FROM inventory. Fails if invalid slot.
+* @param toSlotNum The slot number of this inventory to swap with or stack into. Defaults to -1.
+* @param quantity The quantity to move. Values less tan 1 signify to move the entire slot's stack.
+* @param remainder The amount remaining after swapping/stacking.
+* @param showNotify True if a notification should be shown to both inventory owners.
+* @param isEquipmentSlot True if the TO slot is an EQUIPMENT slot. False means INVENTORY slot.
+* @param fromEquipmentSlot True if the FROM slot is an EQUIPMENT slot. False means INVENTORY slot.
+*/
 bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInventory, int fromSlotNum,
     int toSlotNum, int quantity, int& remainder, bool showNotify, bool isEquipmentSlot, bool fromEquipmentSlot)
 {
@@ -1054,23 +1270,66 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
 }
 
 /**
- * @deprecated 
- * @brief Update each slot one by one
+ * @brief Finds which slots have changed, and sends an update event
  */
-void UInventoryComponent::OnRep_InventorySlotUpdated() const
+void UInventoryComponent::OnRep_InventorySlotUpdated(TArray<FStInventorySlot> OldInventory)
 {
-    OnInventoryUpdated.Broadcast(-1, false);
+	ENetMode NetMode = GetNetMode();
+	ACharacterBase* OwningCharacter = Cast<ACharacterBase>( GetOwner() );
+	for (int i = 0; i < getNumInventorySlots(); i++)
+	{
+		if (OldInventory.IsValidIndex(i))
+		{
+			// If it's the exact same item, nothing was changed.
+			FStInventorySlot& SlotReference = GetInventorySlot(i);
+			if (!UItemSystem::IsExactSameItem(GetInventorySlot(i), OldInventory[i]))
+			{
+				OnInventoryUpdated.Broadcast(i);
+			}
+		}
+		// If the old slot didn't exist, then broadcast the addition of this new slot
+		else
+			OnInventoryUpdated.Broadcast(i);
+	}
 }
 
 /**
- * @deprecated 
- * @brief Update each slot one by one
+ * @brief Finds which slots have changed, and sends an update event
  */
-void UInventoryComponent::OnRep_EquipmentSlotUpdated() const
+void UInventoryComponent::OnRep_EquipmentSlotUpdated(TArray<FStInventorySlot> OldEquipment)
 {
-    OnInventoryUpdated.Broadcast(-1, true);
+	ENetMode NetMode = GetNetMode();
+	ACharacterBase* OwningCharacter = Cast<ACharacterBase>( GetOwner() );
+	for (int i = 0; i < getNumInventorySlots(); i++)
+	{
+		if (OldEquipment.IsValidIndex(i))
+		{
+			// If it's the exact same item, nothing was changed.
+			FStInventorySlot& SlotReference = GetInventorySlot(i, true);
+			if (!UItemSystem::IsExactSameItem(GetInventorySlot(i), OldEquipment[i]))
+			{
+				OnEquipmentUpdated.Broadcast( getEquipmentSlotType(i) );
+			}
+		}
+		// If the old slot didn't exist, then broadcast the addition of this new slot
+		else
+			OnEquipmentUpdated.Broadcast( getEquipmentSlotType(i) );
+	}
 }
 
+/**
+* Starting from the first slot where the item is found, removes the given quantity of
+* the given FStItemData until all of the item has been removed or the removal quantity
+* has been reached (inclusive).
+*
+* @param fromInventory The inventory of the stack being split.
+* @param fromSlotNum The slot number of where the split is originating FROM
+* @param splitQuantity The amount of split off from the original stack.
+* @param toSlotNum The slot number of the destination slot. Negative means use first available slot found.
+* @param showNotify If true, shows a notification. False by default.
+* @return True if the split was successful. Returns false on failure
+						or if firstEmptySlot is true with no slots open
+*/
 bool UInventoryComponent::splitStack(
     UInventoryComponent* fromInventory, int fromSlotNum, int splitQuantity, int toSlotNum, bool showNotify)
 {
@@ -1123,7 +1382,15 @@ bool UInventoryComponent::splitStack(
     return false;
 }
 
-
+/**
+* Increases the amount of an existing item by the quantity given.
+* If the given slot is empty, it will do nothing and fail.
+*
+* @param slotNumber The slot number to be increased
+* @param quantity The quantity to increase the slot by, up to the maximum quantity
+* @param showNotify Show a notification when quantity increases. False by default.
+* @return The number of items actually added. Negative indicates failure.
+*/
 int UInventoryComponent::increaseQuantityInSlot(int slotNumber, int quantity, bool showNotify)
 {
     if (bShowDebug)
@@ -1135,6 +1402,16 @@ int UInventoryComponent::increaseQuantityInSlot(int slotNumber, int quantity, bo
     return increaseQuantityInSlot(slotNumber, quantity, newQty, showNotify);
 }
 
+/**
+* Increases the amount of an existing item by the quantity given.
+* If the given slot is empty, it will do nothing and fail.
+*
+* @param slotNumber The slot number to be increased
+* @param quantity The quantity to increase the slot by, up to the maximum quantity
+* @param newQuantity The new amount after increase (override)
+* @param showNotify Show a notification when quantity increases. False by default.
+* @return The number of items actually added. Negative indicates failure.
+*/
 int UInventoryComponent::increaseQuantityInSlot(int slotNumber, int quantity, int& newQuantity, bool showNotify)
 {
     if (bShowDebug)
@@ -1152,7 +1429,13 @@ int UInventoryComponent::increaseQuantityInSlot(int slotNumber, int quantity, in
         const int newTotal = startQty + abs(quantity);
         newQuantity = (newTotal >= maxQty) ? maxQty : newTotal;
         const int amountAdded = (newQuantity - startQty);
-        m_inventorySlots[slotNumber].SlotQuantity = newQuantity;
+    	m_inventorySlots[slotNumber].SlotQuantity = newQuantity;
+
+    	// If we are the server, we don't receive the "OnRep" call,
+    	//    so the broadcast needs to be called manually.
+    	if (GetNetMode() < NM_Client)
+    		OnInventoryUpdated.Broadcast(slotNumber);
+    	
         if (showNotify)
         {
             sendNotification(getItemNameInSlot(slotNumber), amountAdded);
@@ -1163,6 +1446,17 @@ int UInventoryComponent::increaseQuantityInSlot(int slotNumber, int quantity, in
     return -1;
 }
 
+/**
+* Increases the amount of an existing item by the quantity given.
+* If the given slot is empty, it will do nothing and fail.
+*
+* @param slotNumber The slot number to be decreased
+* @param quantity The quantity to decrease the slot by
+* @param remainder The remaining amount after decrease (override)
+* @param isEquipment True if the slot is an equipment slot
+* @param showNotify Show a notification when quantity increases. False by default.
+* @return The number of items actually removed. Negative indicates failure.
+*/
 int UInventoryComponent::decreaseQuantityInSlot(int slotNumber, int quantity, int& remainder, bool isEquipment, bool showNotify)
 {
     if (bShowDebug)
@@ -1202,6 +1496,16 @@ int UInventoryComponent::decreaseQuantityInSlot(int slotNumber, int quantity, in
     return -1;
 }
 
+/**
+* Increases the amount of an existing item by the quantity given.
+* If the given slot is empty, it will do nothing and fail.
+*
+* @param slotNumber The slot number to be decreased
+* @param quantity The quantity to decrease the slot by
+* @param isEquipment True if the slot is an equipment slot
+* @param showNotify Show a notification when quantity increases. False by default.
+* @return The number of items actually removed. Negative indicates failure.
+*/
 int UInventoryComponent::decreaseQuantityInSlot(int slotNumber, int quantity, bool isEquipment, bool showNotify)
 {
     if (bShowDebug)
@@ -1213,6 +1517,10 @@ int UInventoryComponent::decreaseQuantityInSlot(int slotNumber, int quantity, bo
     return decreaseQuantityInSlot(slotNumber, quantity, remainder, isEquipment, showNotify);
 }
 
+/**
+* CLIENT event that retrieves and subsequently removes all inventory notifications.
+* @return A TArray of FStInventoryNotify
+*/
 TArray<FStInventoryNotify> UInventoryComponent::getNotifications()
 {
     TArray<FStInventoryNotify> invNotify;
@@ -1230,6 +1538,14 @@ TArray<FStInventoryNotify> UInventoryComponent::getNotifications()
     return invNotify;
 }
 
+/**
+* Sends a notification that an item was modified. Since the item may or may not exist
+* at the time the notification is created, we just use a simple FName and the class defaults.
+* 
+* @param itemName The FName of the affected item
+* @param quantity The quantity affected
+* @param wasAdded True if the item was added, False if the item was removed
+*/
 void UInventoryComponent::sendNotification_Implementation(FName itemName, int quantity, bool wasAdded)
 {
     if (bShowDebug)
@@ -1251,6 +1567,11 @@ void UInventoryComponent::sendNotification_Implementation(FName itemName, int qu
     OnNotificationAvailable.Broadcast();
 }
 
+/**
+* Wipes the inventory slot, making it empty and completely destroying anything previously in the slot.
+* Mostly used for cases where we know we want the slot to absolutely be empty in all cases.
+* @param slotNumber The slot number to reset
+*/
 void UInventoryComponent::resetInventorySlot(int slotNumber)
 {
     if (bShowDebug)
@@ -1262,6 +1583,15 @@ void UInventoryComponent::resetInventorySlot(int slotNumber)
     //InventoryUpdate(slotNumber);
 }
 
+/**
+ * @deprecated 
+* Performs network replication and keeps the inventory updated.
+* Should be called anytime a value in the inventory is changed.
+*
+* @param slotNumber The slot that was affected
+* @param isEquipment True if the slot is an equipment slot. False by default.
+* @param isAtomic If true, sends the entire inventory. Should not be used except for testing.
+*/
 void UInventoryComponent::InventoryUpdate(int slotNumber, bool isEquipment, bool isAtomic)
 {
     if (bShowDebug)
@@ -1269,19 +1599,16 @@ void UInventoryComponent::InventoryUpdate(int slotNumber, bool isEquipment, bool
         UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): InventoryUpdate(%d)"),
             GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
     }
-    // Notify delegate so bound functions can trigger
-    if (bShowDebug)
-    {
-        UE_LOG(LogTemp, Display, TEXT("%s(%s): OnInventoryUpdated.Broadcast(%d, %s)"),
-            *GetName(), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
-            slotNumber, isEquipment?TEXT("TRUE"):TEXT("FALSE"));
-    }
 
     // Fire server delegates
     if (isAtomic)
-        OnInventoryUpdated.Broadcast(-1, isEquipment);
+    	slotNumber = -1;
+
+	if (isEquipment)
+		OnEquipmentUpdated.Broadcast(
+			getEquipmentSlotByNumber(slotNumber).EquipType);
     else
-        OnInventoryUpdated.Broadcast(slotNumber, isEquipment);
+        OnInventoryUpdated.Broadcast(slotNumber);
 
     // Trigger client delegates
     Multicast_InventoryUpdate(isAtomic ? -1 : slotNumber, isEquipment);
@@ -1294,9 +1621,31 @@ void UInventoryComponent::Multicast_InventoryUpdate_Implementation(int slotNumbe
         UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): Client_InventoryUpdate_Implementation()"),
             GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
     }
-    OnInventoryUpdated.Broadcast(slotNumber, isEquipment);
+	if (isEquipment)
+	{
+		OnEquipmentUpdated.Broadcast(getEquipmentSlotByNumber(slotNumber).EquipType);
+	}
+	else
+		OnInventoryUpdated.Broadcast(slotNumber);
+	m_bIsInventoryReady = true;
 }
 
+/**
+* Called when the server is reporting that a PLAYER wants to transfer items between
+* two inventories. This is NOT a delegate/event. It should be invoked by the delegate
+* that intercepted the net event request. This function transfers two items between inventories.
+* Validation is required if you want to keep game integrity.
+*
+* @param fromInventory The inventory losing the item
+* @param toInventory The inventory gaining the item. Can be the same inventory.
+* @param fromSlotNum The slot of origination. Required to be zero or greater. Must be a real item.
+* @param toSlotNum The slot of the destination. Negative indicates to use the first available slot.
+* @param moveQuantity The amount to be moved. Will default to 1.
+* @param overflowDrop If true, anything that overflows will spawn a pickup actor.
+* @param isFromEquipSlot If true, signifies the FROM slot is an equipment slot.
+* @param isToEquipSlot If true, signifies the TO slot is an equipment slot.
+* @return True if at least 1 of the item was successfully moved. False if the transfer failed entirely.
+*/
 bool UInventoryComponent::transferItemBetweenSlots(
     UInventoryComponent* fromInventory, UInventoryComponent* toInventory,
     int fromSlotNum, int toSlotNum, int moveQuantity, bool overflowDrop, bool isFromEquipSlot, bool isToEquipSlot)
@@ -1359,6 +1708,15 @@ bool UInventoryComponent::transferItemBetweenSlots(
     return false;
 }
 
+/**
+* Called when an item is activated from the inventory. This function is
+* executed from the inventory of the player who activated the item.
+*
+* @param slotNumber The number of the inventory slot containing the item to be activated
+* @param isEquipment True if this is an equipment slot. False by default.
+* @param consumeItem True consumes the item, whether it's consumable or not. False by default.
+* @return True if the item was successfully activated
+*/
 bool UInventoryComponent::activateItemInSlot(int slotNumber, bool isEquipment, bool consumeItem)
 {
     if (bShowDebug)
@@ -1417,6 +1775,12 @@ void UInventoryComponent::Server_RequestItemActivation_Implementation(
     }
 }
 
+/**
+ * Adds the item to the notification TMap, notifying the player about a modification to their inventory.
+ * @param itemName The item name that is being notified
+ * @param quantityAffected The quantity that was affected (how many the player gained/lost)
+ * @return True if the notification was successfully added to the queue.
+ */
 bool UInventoryComponent::setNotifyItem(FName itemName, int quantityAffected)
 {
     if (bShowDebug)
@@ -1442,6 +1806,17 @@ bool UInventoryComponent::setNotifyItem(FName itemName, int quantityAffected)
 
 
 
+/**
+ * Sends a request to the server to transfer items between inventories.
+ * Requires Validation. Called by the client. Executes from the player's inventory.
+ * @param fromInventory The inventory of the FROM item (the 'origination')
+ * @param toInventory The inventory of the TO item (the 'receiving')
+ * @param fromSlot The slot number of the origination inventory being affected
+ * @param toSlot The slot number of the receiving inventory (-1 means first available slot)
+ * @param moveQty The amount to move. Negative means move everything.
+ * @param isFromEquipSlot If TRUE, the origination slot will be treated as an equipment slot. False means inventory.
+ * @param isToEquipSlot If TRUE, the receiving slot will be treated as an equipment slot. If false, inventory.
+ */
 void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponent* fromInventory,
     UInventoryComponent* toInventory, int fromSlot, int toSlot, int moveQty, bool isFromEquipSlot, bool isToEquipSlot)
 {
@@ -1622,6 +1997,13 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
 }
 
 
+/**
+ * Sends a request to the server to take the item from the FROM inventory, and throw it on the ground as a pickup.
+ * @param fromInventory The inventory of the FROM item (the 'origination')
+ * @param fromSlot The slot number of the origination inventory being affected
+ * @param quantity The amount to toss out. Negative means everything.
+ * @param isFromEquipSlot If TRUE, the origination slot will be treated as an equipment slot. False means inventory.
+ */
 void UInventoryComponent::Server_DropItemOnGround_Implementation(UInventoryComponent* fromInventory, int fromSlot,
     int quantity, bool isFromEquipSlot)
 {
@@ -1687,6 +2069,11 @@ void UInventoryComponent::Server_DropItemOnGround_Implementation(UInventoryCompo
     
 }
 
+/**
+ * Sends a request to the server when the player opens something like a storage container, and needs the
+ * information of the inventory for their UI. Called by the client.
+ * @requestInventory The inventory component the player wishes to load in
+ */
 void UInventoryComponent::Server_RequestOtherInventory_Implementation(UInventoryComponent* targetInventory)
 {
     UE_LOG(LogTemp, Display, TEXT("RequestOtherInventory() Received (SERVER EVENT) - Player wants to load an inventory"));
@@ -1749,6 +2136,10 @@ void UInventoryComponent::Server_RequestOtherInventory_Implementation(UInventory
     
 }
 
+/**
+ * Called when the player has opened a new inventory (such as loot or
+ * a treasure chest) and needs the information for the first time.
+ */
 void UInventoryComponent::Server_StopUseOtherInventory_Implementation(UInventoryComponent* otherInventory)
 {
     if (IsValid(otherInventory))

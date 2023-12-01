@@ -199,6 +199,9 @@ public:
 
 	// Returns true if both item structs are identical and valid
 	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static bool IsSameItem(FStInventorySlot& SlotOne, FStInventorySlot& SlotTwo);
+	static bool IsSameItem(FStInventorySlot& SlotOne, FStInventorySlot& SlotTwo);
+	
+	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
+	static bool IsExactSameItem(FStInventorySlot& SlotOne, FStInventorySlot& SlotTwo);
 
 };
