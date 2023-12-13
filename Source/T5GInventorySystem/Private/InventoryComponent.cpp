@@ -1,12 +1,27 @@
 
 // ReSharper disable CppUE4CodingStandardNamingViolationWarning
 #include "InventoryComponent.h"
+
+#include "InventorySystemGlobals.h"
 #include "PickupActorBase.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerState.h"
+#include "Kismet/GameplayStatics.h"
+#include "lib/InventorySave.h"
+#include "Logging/StructuredLog.h"
 #include "Net/UnrealNetwork.h" // Used for replication
 #include "TalesDungeoneer/Characters/CharacterBase.h"
 
+void UInventoryComponent::Helper_SaveInventory(USaveGame*& SaveData) const
+{
+	UInventorySave* InventorySave = Cast<UInventorySave>( SaveData );
+	if (IsValid(SaveData))
+	{
+		InventorySave->SetSaveName(InventorySaveSlotName_);
+		InventorySave->InventorySlots_ = m_inventorySlots;
+		InventorySave->EquipmentSlots_ = m_equipmentSlots;
+	}
+}
 
 void UInventoryComponent::BeginPlay()
 {
@@ -31,7 +46,7 @@ void UInventoryComponent::BeginPlay()
 
     if (!IsValid(UItemSystem::getItemDataTable()))
     {
-        UE_LOG(LogEngine, Warning, TEXT("%s(%s): Data Table Not Found"),
+        UE_LOG(LogEngine, Error, TEXT("%s(%s): Data Table Not Found"),
             *GetName(), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
     }
     else
@@ -45,17 +60,17 @@ UInventoryComponent::UInventoryComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
     SetIsReplicatedByDefault(true);
-    SetAutoActivate(true);
+	if (bVerboseOutput)
+		bShowDebug = true;
 }
 
 /*
  * Runs the initialization after UE has created the UObject system.
  * Sets up the stuff for the inventory that can't be done before the game is running.
  */
-void UInventoryComponent::InitializeInventory()
+void UInventoryComponent::ReinitializeInventory()
 {
-	// Clients cannot initialize inventories
-	if (GetNetMode() < NM_Client)
+	if (!bIsInventoryReady)
 	{
 		ACharacterBase* OwnerCharacter = Cast<ACharacterBase>(GetOwner());
 		if (!IsValid(OwnerCharacter))
@@ -65,125 +80,311 @@ void UInventoryComponent::InitializeInventory()
 		if (isInventoryReady())
 			return;
 		
-    	// Ensure the number of inventory slots is valid. If we added an inventory system,
-    	// it should at least have *one* slot at minimum. Otherwise, wtf is the point?
-    	if (NumberOfInvSlots < 1)
-    		NumberOfInvSlots = 6;
+		// Ensure the number of inventory slots is valid. If we added an inventory system,
+		// it should at least have *one* slot at minimum. Otherwise, wtf is the point?
+		if (NumberOfInvSlots < 1)
+			NumberOfInvSlots = 6;
     	
-    	m_inventorySlots.Empty();
-    	m_equipmentSlots.Empty();
-    	m_notifications.Empty();
+		m_inventorySlots.Empty();
+		m_equipmentSlots.Empty();
+		m_notifications.Empty();
     	
-    	// Setup Inventory Slots
-    	for (int i = 0; i < NumberOfInvSlots; i++)
-    	{
-    	    FStInventorySlot newSlot;
-    	    newSlot.SlotType = EInventorySlotType::GENERAL;
-    	    m_inventorySlots.Add(newSlot);
-    		OnInventoryUpdated.Broadcast(i);
-    	}
+		// Setup Inventory Slots
+		for (int i = 0; i < NumberOfInvSlots; i++)
+		{
+			FStInventorySlot newSlot;
+			newSlot.SlotType = EInventorySlotType::GENERAL;
+			m_inventorySlots.Add(newSlot);
+			// Server doesn't receive "OnRep", fire manually
+			OnInventoryUpdated.Broadcast(i);
+		}
 	
-    	// Setup Equipment Slots
-    	for (int i = 0; i < EligibleEquipmentSlots.Num(); i++)
-    	{
-    	    if (EligibleEquipmentSlots.IsValidIndex(i))
-    	    {
-    	        if (EligibleEquipmentSlots[i] != EEquipmentSlotType::NONE)
-    	        {
-    	            // Ignore slots already added - There can be only one..
-    	            if (getEquipmentSlotNumber(EligibleEquipmentSlots[i]) < 0)
-    	            {
-    	                FStInventorySlot newSlot;
-    	                newSlot.SlotType  = EInventorySlotType::EQUIP;
-    	                newSlot.EquipType = EligibleEquipmentSlots[i];
-    	                m_equipmentSlots.Add(newSlot);
-    	            	OnEquipmentUpdated.Broadcast(EligibleEquipmentSlots[i]);
-    	            }
-    	        }
-    	    }
-    	}
-
-		/** TODO
-		 * Starting items should be replaced entirely by save files or first-login scripts.
-		 * Starting items will only happen once - The first time a character is created.
-		 */
+		// Setup Equipment Slots
+		for (int i = 0; i < EligibleEquipmentSlots.Num(); i++)
+		{
+			if (EligibleEquipmentSlots.IsValidIndex(i))
+			{
+				if (EligibleEquipmentSlots[i] != EEquipmentSlotType::NONE)
+				{
+					// Ignore slots already added - There can be only one..
+					if (getEquipmentSlotNumber(EligibleEquipmentSlots[i]) < 0)
+					{
+						FStInventorySlot newSlot;
+						newSlot.SlotType  = EInventorySlotType::EQUIP;
+						newSlot.EquipType = EligibleEquipmentSlots[i];
+						m_equipmentSlots.Add(newSlot);
+						// Server doesn't receive "OnRep", fire manually
+						OnEquipmentUpdated.Broadcast(EligibleEquipmentSlots[i]);
+					}
+				}
+			}
+		}
 		
 		// If the inventory component has a proper actor-owner, proceed
-    	if (IsValid(GetOwner()))
-    	{
-    		
-        	UE_LOG(LogTemp, Display, TEXT("%s(%s): Found %d Starting Items"),
+		if (IsValid(GetOwner()))
+		{
+    	
+			UE_LOG(LogTemp, Display, TEXT("%s(%s): Found %d Starting Items"),
 				*OwnerCharacter->GetName(),
 				OwnerCharacter->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
 				StartingItems.Num());
-    		
-            for (int i = 0; i < StartingItems.Num(); i++)
-            {
-                if (StartingItems.IsValidIndex(i))
-                {
-                    // Determine the starting item by item name given
-                    const FName itemName = StartingItems[i].startingItem;
-                    int slotNum = -1;
+    	
+			for (int i = 0; i < StartingItems.Num(); i++)
+			{
+				if (StartingItems.IsValidIndex(i))
+				{
+					// Determine the starting item by item name given
+					const FName itemName = StartingItems[i].startingItem;
+					const FStItemData ItemData = UItemSystem::getItemDataFromItemName(itemName);
+					int slotNum = -1;
 
-                	// The item is set to start in a specific equipment slot
-                    if (StartingItems[i].equipType != EEquipmentSlotType::NONE)
-                    {
-                        if (slotNum < 0)
-                        {
-                            slotNum = getEquipmentSlotNumber(StartingItems[i].equipType);
-                        }
-                        if (slotNum >= 0)
-                        {
-                        	// TODO - A check should be added here to ensure the item
-                        	//        is being added to an appropriate slot.
-                            m_equipmentSlots[slotNum].ItemName = itemName;
-                        	m_equipmentSlots[slotNum].SlotQuantity = StartingItems[i].quantity;
+					if (StartingItems[i].bStartEquipped)
+					{
+						// Check each eligible equip slot for an open slot
+						for (const EEquipmentSlotType EquipSlot : ItemData.equipSlots)
+						{
+							if (isEquipmentSlotEmpty(EquipSlot))
+							{
+								slotNum = getEquipmentSlotNumber(EquipSlot);
+							}
+						}
 
-                        	// If we are the server, we don't receive the "OnRep" call,
-                        	//    so the broadcast needs to be called manually.
-                        	if (GetNetMode() < NM_Client)
-                        		OnEquipmentUpdated.Broadcast(m_equipmentSlots[slotNum].EquipType);
-                        }
-                    }
-                	// The item is not set to start in a specific inventory slot
-                    else
-                    {
-                        const int itemsAdded = AddItemFromDataTable(itemName,
-                        	StartingItems[i].quantity, slotNum,
-                        	false, false, false);
-                        if (itemsAdded < 1)
-                        {
-                            UE_LOG(LogTemp, Warning, TEXT("%s(%s): Item(s) failed to add (StartingItem = %s)"),
-                                *GetName(), GetOwner()->HasAuthority()?TEXT("SRV"):TEXT("CLI"), *itemName.ToString());
-                        }
-                    	else
-                    	{
-                    		UE_LOG(LogTemp, Display, TEXT("%s(%s): Added %d of starting item '%s'"),
-								*OwnerCharacter->GetName(),
-								OwnerCharacter->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
-								itemsAdded, *itemName.ToString());
-                    	}
-                    }
-                }
-            }
-    	}//is owner valid (starting items)
-		m_bIsInventoryReady = true;
-    }//isServer
-    
+						// Equip item into the first eligible slot
+						if (slotNum >= 0)
+						{
+							// TODO - A check should be added here to ensure the item
+							//        is being added to an appropriate slot.
+							m_equipmentSlots[slotNum].ItemName = itemName;
+							m_equipmentSlots[slotNum].SlotQuantity = StartingItems[i].quantity;
+
+							// If we are the server, we don't receive the "OnRep" call,
+							//    so the broadcast needs to be called manually.
+							if (GetNetMode() < NM_Client)
+								OnEquipmentUpdated.Broadcast(m_equipmentSlots[slotNum].EquipType);
+
+							// If the item gets equipped, continue the for loop at the next iteration
+							continue;
+                    	
+						}
+					}
+            	
+					// Item isn't equipped, or all eligible slots were full
+					const int itemsAdded = AddItemFromDataTable(itemName,
+						StartingItems[i].quantity, slotNum,
+						false, false, false);
+					if (itemsAdded < 1)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("%s(%s): Item(s) failed to add (StartingItem = %s)"),
+							*GetName(), GetOwner()->HasAuthority()?TEXT("SRV"):TEXT("CLI"), *itemName.ToString());
+					}
+					else
+					{
+						UE_LOG(LogTemp, Display, TEXT("%s(%s): Added %d of starting item '%s'"),
+							*OwnerCharacter->GetName(),
+							OwnerCharacter->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
+							itemsAdded, *itemName.ToString());
+					}
+				}
+			}
+		}//is owner valid (starting items)
+		bIsInventoryReady = true;
+	}
+}
+
+void UInventoryComponent::RestoreInventory(
+	const TArray<FStInventorySlot>& RestoredInventory,
+	const TArray<FStInventorySlot>& RestoredEquipment)
+{
+	if (GetNetMode() == NM_Client)
+	{
+		// If the server handles the save, then any info from the client is invalid
+		if (bSavesOnServerOnly)
+		{
+			return;
+		}
+	}
+	
+	bInventoryRestored = true;
+	bIsInventoryReady = false;
+	
+	m_inventorySlots.Empty();
+	m_equipmentSlots.Empty();
+
+	// If we iterate the arrays, OnRep will trigger.
+	// Not the most optimized way, but it avoids any ugly RPC work
+	for (int i = 0; i < RestoredInventory.Num(); i++)
+	{
+		FStInventorySlot NewSlot = RestoredInventory[i];
+		m_inventorySlots.Add(NewSlot);
+	}
+	for (int i = 0; i < RestoredEquipment.Num(); i++)
+	{
+		FStInventorySlot NewSlot = RestoredEquipment[i];
+		m_equipmentSlots.Add(NewSlot);
+	}
+	
+	bInventoryRestored	= true;
+	bIsInventoryReady	= true;
+
+	// Update the server, if we are the client
+	if (GetNetMode() == NM_Client)
+		Server_RestoreSavedInventory(RestoredInventory, RestoredEquipment);
+}
+
+/** @brief Saves the inventory by overwriting the old save file.
+ *			If the save doesn't exist, it will generate one.
+ * @param responseStr The response from the save attempt
+ * @param isAsync True runs the save asynchronously (False by Default)
+ *			The response delegate is "OnInventorySaved(bool)"
+ * @return Returns the save name on success, empty string on failure or async
+ */
+FString UInventoryComponent::SaveInventory(FString& responseStr, bool isAsync)
+{
+	responseStr = "Failed to Save (Inventory Not Ready)";
+	if (bSavesOnServerOnly)
+	{
+		if (GetNetMode() == NM_Client)
+		{
+			responseStr = "Saving Only Allowed on Authority";
+			return FString();
+		}
+	}
+	
+	if (bIsInventoryReady)
+	{
+		// The inventory save file does not exist, if the string is empty.
+		// If so, the script will try to generate one.
+		if (InventorySaveSlotName_.IsEmpty())
+		{
+			FString TempSaveName;
+			do
+			{
+				for (int i = 0; i < 16; i++)
+				{
+					TArray<int> RandValues = {
+						FMath::RandRange(48,57), // Numbers 0-9
+						FMath::RandRange(65,90), // Lowercase a-z
+						FMath::RandRange(97,122) // Uppercase A-Z
+					};
+					const char RandChar = static_cast<char>(RandValues[FMath::RandRange(0,2)]);
+					TempSaveName.AppendChar(RandChar);
+				}
+			}
+			// Loop until a unique save string has been created
+			while (UGameplayStatics::DoesSaveGameExist(TempSaveName, 0));
+			InventorySaveSlotName_ = TempSaveName;
+		}
+
+		// If still empty, there was a problem with the save slot name
+		if (InventorySaveSlotName_.IsEmpty())
+		{
+			responseStr = "Failed to Generate Unique SaveSlotName";
+			return FString();
+		}
+
+		if (isAsync)
+		{
+			FAsyncLoadGameFromSlotDelegate SaveDelegate;
+			SaveDelegate.BindUObject(this, &UInventoryComponent::SaveInventoryDelegate);
+			UGameplayStatics::AsyncLoadGameFromSlot(InventorySaveSlotName_, 0, SaveDelegate);
+			responseStr = "Sent Request for Async Save";
+			return InventorySaveSlotName_;
+		}
+
+		USaveGame* SaveData;
+		if (UGameplayStatics::DoesSaveGameExist(InventorySaveSlotName_, 0))
+		{
+			SaveData = UGameplayStatics::LoadGameFromSlot(InventorySaveSlotName_, 0);
+		}
+		else
+		{
+			SaveData = UGameplayStatics::CreateSaveGameObject( UInventorySave::StaticClass() );
+			if (!IsValid(SaveData))
+			{
+				responseStr = "Failed to Create New Save Object";
+				return FString();
+			}
+		}
+		
+		UInventorySave* InventorySave = Cast<UInventorySave>(SaveData);
+		if (IsValid(InventorySave))
+		{
+			if (UGameplayStatics::SaveGameToSlot(InventorySave, InventorySaveSlotName_, 0))
+			{
+				InventorySave->SetSaveName(InventorySaveSlotName_);
+				Helper_SaveInventory(SaveData);
+				responseStr = "Successful Synchronous Save";
+				return InventorySaveSlotName_;
+			}
+		}
+		responseStr = "SaveNameSlot was VALID but UInventorySave was NULL";
+	}
+	return FString();
+}
+
+
+/** @brief Loads the requested save slot name, populating the inventory with
+ * any data found in a save file with the given name.
+ * @param responseStr The response from the save attempt
+ * @param SaveSlotName The name of the save file where the data is found
+ * @param isAsync True runs the save asynchronously (False by Default)
+ *		Response delegate is "OnInventoryRestored(bool)"
+ * @return Returns true on success or async run, false on failure.
+ */
+bool UInventoryComponent::LoadInventory(
+		FString& responseStr, FString SaveSlotName, bool isAsync)
+{
+	responseStr = "Failed to Save (Inventory Has Not Initialized)";
+	if (bSavesOnServerOnly)
+	{
+		if (GetNetMode() == NM_Client)
+		{
+			responseStr = "Saving Only Allowed on Authority";
+			return false;
+		}
+	}
+	
+	if (bIsInventoryReady)
+	{
+		if (!UGameplayStatics::DoesSaveGameExist(SaveSlotName, 0))
+		{
+			responseStr = "No SaveSlotName Exists";
+			return false;
+		}
+		InventorySaveSlotName_ = SaveSlotName;
+		
+		if (isAsync)
+		{
+			FAsyncLoadGameFromSlotDelegate LoadDelegate;
+			LoadDelegate.BindUObject(this, &UInventoryComponent::LoadDataDelegate);
+			UGameplayStatics::AsyncLoadGameFromSlot(InventorySaveSlotName_, 0, LoadDelegate);
+			responseStr = "Sent Async Save Request";
+			return true;
+		}
+
+		const USaveGame* SaveData = UGameplayStatics::LoadGameFromSlot(
+											InventorySaveSlotName_, 0);
+		
+		if (IsValid(SaveData))
+		{
+			const UInventorySave* InventorySave = Cast<UInventorySave>( SaveData );
+			if (IsValid(InventorySave))
+			{
+				RestoreInventory(InventorySave->InventorySlots_,
+								 InventorySave->EquipmentSlots_);
+				responseStr = "Successful Synchronous Load";
+				return true;	
+			}
+		}
+	}
+	return false;
 }
 
 void UInventoryComponent::OnComponentCreated()
 {
-    if (bShowDebug)
-    {
-        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): OnComponentCreated()"),
-            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
-    }
-    //UE_LOG(LogTemp, Display, TEXT("InventoryComponent: OnComponentCreated"));
+	SetAutoActivate(true);
     Super::OnComponentCreated();
     RegisterComponent();
-    if (bVerboseOutput)
-    	bShowDebug = true;
 }
 
 /**
@@ -1184,7 +1385,7 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
     {
 
         // Check if items can be stacked. This will be the easiest, fastest way to manage this call.
-        if (UItemSystem::IsSameItem(fromInventory->GetInventorySlot(fromSlotNum), GetInventorySlot(toSlotNum)))
+        if (UInventorySystem::IsSameItem(fromInventory->GetInventorySlot(fromSlotNum), GetInventorySlot(toSlotNum)))
         {
             if (fromInventory->decreaseQuantityInSlot(fromSlotNum, quantity, showNotify))
             {
@@ -1233,7 +1434,7 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
 
     // If the items match or the destination slot is empty, it will stack.
     // Otherwise it will swap the two slots.
-    const bool isSameItem = UItemSystem::IsSameItem(fromInventory->GetInventorySlot(fromSlotNum), GetInventorySlot(toSlotNum)); 
+    const bool isSameItem = UInventorySystem::IsSameItem(fromInventory->GetInventorySlot(fromSlotNum), GetInventorySlot(toSlotNum)); 
     if (isSameItem || !UItemSystem::getItemNameIsValid(ToInventorySlot.ItemName))
     {
         if (isEquipmentSlot)
@@ -1274,15 +1475,13 @@ bool UInventoryComponent::swapOrStackWithRemainder(UInventoryComponent* fromInve
  */
 void UInventoryComponent::OnRep_InventorySlotUpdated(TArray<FStInventorySlot> OldInventory)
 {
-	ENetMode NetMode = GetNetMode();
-	ACharacterBase* OwningCharacter = Cast<ACharacterBase>( GetOwner() );
 	for (int i = 0; i < getNumInventorySlots(); i++)
 	{
 		if (OldInventory.IsValidIndex(i))
 		{
 			// If it's the exact same item, nothing was changed.
 			FStInventorySlot& SlotReference = GetInventorySlot(i);
-			if (!UItemSystem::IsExactSameItem(GetInventorySlot(i), OldInventory[i]))
+			if (!UInventorySystem::IsExactSameItem(GetInventorySlot(i), OldInventory[i]))
 			{
 				OnInventoryUpdated.Broadcast(i);
 			}
@@ -1298,15 +1497,13 @@ void UInventoryComponent::OnRep_InventorySlotUpdated(TArray<FStInventorySlot> Ol
  */
 void UInventoryComponent::OnRep_EquipmentSlotUpdated(TArray<FStInventorySlot> OldEquipment)
 {
-	ENetMode NetMode = GetNetMode();
-	ACharacterBase* OwningCharacter = Cast<ACharacterBase>( GetOwner() );
 	for (int i = 0; i < getNumInventorySlots(); i++)
 	{
 		if (OldEquipment.IsValidIndex(i))
 		{
 			// If it's the exact same item, nothing was changed.
 			FStInventorySlot& SlotReference = GetInventorySlot(i, true);
-			if (!UItemSystem::IsExactSameItem(GetInventorySlot(i), OldEquipment[i]))
+			if (!UInventorySystem::IsExactSameItem(GetInventorySlot(i), OldEquipment[i]))
 			{
 				OnEquipmentUpdated.Broadcast( getEquipmentSlotType(i) );
 			}
@@ -1315,6 +1512,67 @@ void UInventoryComponent::OnRep_EquipmentSlotUpdated(TArray<FStInventorySlot> Ol
 		else
 			OnEquipmentUpdated.Broadcast( getEquipmentSlotType(i) );
 	}
+}
+
+void UInventoryComponent::Server_InitSavedInventory_Implementation(
+	const TArray<FStStartingItem>& StartingItemList)
+{
+	if (!bIsInventoryReady)
+	{
+		StartingItems.Empty();
+		for (const FStStartingItem& StartingItem : StartingItemList)
+		{
+			StartingItems.Add(StartingItem);
+		}
+		ReinitializeInventory();
+	}
+
+	if (!bInventoryRestored)
+		return;
+
+	for (const FStStartingItem& StartingItem : StartingItemList)
+	{
+		if (StartingItem.bStartEquipped)
+		{
+			const FName itemName = StartingItem.startingItem;
+			const FStItemData ItemData = UItemSystem::getItemDataFromItemName(itemName);
+			
+			int slotNumber = -1;
+
+			// Check each eligible equip slot for an open slot
+			for (const EEquipmentSlotType EquipSlot : ItemData.equipSlots)
+			{
+				if (isEquipmentSlotEmpty(EquipSlot))
+				{
+					slotNumber = getEquipmentSlotNumber(EquipSlot);
+				}
+			}
+
+			// If an eligible equipment slot was available, equip the item.
+			if (slotNumber >= 0)
+			{
+				// TODO - A check should be added here to ensure the item
+				//        is being added to an appropriate slot.
+				m_equipmentSlots[slotNumber].ItemName = StartingItem.startingItem;
+				m_equipmentSlots[slotNumber].SlotQuantity = StartingItem.quantity;
+
+				// Server doesn't receive the "OnRep" call, fire manually
+				OnEquipmentUpdated.Broadcast(m_equipmentSlots[slotNumber].EquipType);
+			}
+		}
+		// If it isn't an equipment item going into an equipment slot,
+		// it can just be added from front to back
+		else
+			AddItemFromDataTable(StartingItem.startingItem, StartingItem.quantity);
+	}
+}
+
+void UInventoryComponent::Server_RestoreSavedInventory_Implementation(
+	const TArray<FStInventorySlot>& RestoredInventory,
+	const TArray<FStInventorySlot>& RestoredEquipment)
+{
+	if (GetNetMode() < NM_Client)
+		RestoreInventory(RestoredInventory, RestoredEquipment);
 }
 
 /**
@@ -1584,53 +1842,6 @@ void UInventoryComponent::resetInventorySlot(int slotNumber)
 }
 
 /**
- * @deprecated 
-* Performs network replication and keeps the inventory updated.
-* Should be called anytime a value in the inventory is changed.
-*
-* @param slotNumber The slot that was affected
-* @param isEquipment True if the slot is an equipment slot. False by default.
-* @param isAtomic If true, sends the entire inventory. Should not be used except for testing.
-*/
-void UInventoryComponent::InventoryUpdate(int slotNumber, bool isEquipment, bool isAtomic)
-{
-    if (bShowDebug)
-    {
-        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): InventoryUpdate(%d)"),
-            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"), slotNumber);
-    }
-
-    // Fire server delegates
-    if (isAtomic)
-    	slotNumber = -1;
-
-	if (isEquipment)
-		OnEquipmentUpdated.Broadcast(
-			getEquipmentSlotByNumber(slotNumber).EquipType);
-    else
-        OnInventoryUpdated.Broadcast(slotNumber);
-
-    // Trigger client delegates
-    Multicast_InventoryUpdate(isAtomic ? -1 : slotNumber, isEquipment);
-}
-
-void UInventoryComponent::Multicast_InventoryUpdate_Implementation(int slotNumber, bool isEquipment)
-{
-    if (bShowDebug)
-    {
-        UE_LOG(LogTemp, Display, TEXT("InventoryComponent(%s): Client_InventoryUpdate_Implementation()"),
-            GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"));
-    }
-	if (isEquipment)
-	{
-		OnEquipmentUpdated.Broadcast(getEquipmentSlotByNumber(slotNumber).EquipType);
-	}
-	else
-		OnInventoryUpdated.Broadcast(slotNumber);
-	m_bIsInventoryReady = true;
-}
-
-/**
 * Called when the server is reporting that a PLAYER wants to transfer items between
 * two inventories. This is NOT a delegate/event. It should be invoked by the delegate
 * that intercepted the net event request. This function transfers two items between inventories.
@@ -1796,8 +2007,48 @@ bool UInventoryComponent::setNotifyItem(FName itemName, int quantityAffected)
     return false;
 }
 
+void UInventoryComponent::LoadDataDelegate(const FString& SaveSlotName, int32 UserIndex, USaveGame* SaveData)
+{	
+	if (!IsValid(SaveData))
+	{
+		if (UGameplayStatics::CreateSaveGameObject( UInventorySave::StaticClass() ))
+		{
+			InventorySaveSlotName_ = SaveSlotName;
+			OnInventoryRestored.Broadcast(true);
+			return;
+		}
+		OnInventoryRestored.Broadcast(false);
+		return;
+	}
+	const UInventorySave* InventorySave = Cast<UInventorySave>( SaveData );
+	
+	if (!IsValid(InventorySave))
+		return;
+	
+	RestoreInventory(InventorySave->InventorySlots_, InventorySave->EquipmentSlots_);
+	OnInventoryRestored.Broadcast(true);
+}
 
+/**
+ * @brief Gets the existing save data file or creates it, then performs a save.
+ * @param SaveSlotName The name of the save slot to be used
+ * @param UserIndex Usually zero
+ * @param SaveData Pointer to the save data. Invalid if it does not exist.
+ */
+ void UInventoryComponent::SaveInventoryDelegate(const FString& SaveSlotName, int32 UserIndex, USaveGame* SaveData)
+{
+	bool wasSuccess = false;
+	if (!IsValid(SaveData))
+	{
+		SaveData = UGameplayStatics::CreateSaveGameObject( UInventorySave::StaticClass() );
+	}
 
+	// If the save is valid, run the save
+	Helper_SaveInventory(SaveData);
+	UGameplayStatics::SaveGameToSlot(SaveData, InventorySaveSlotName_, 0);
+	wasSuccess = true;
+	OnInventoryRestored.Broadcast(wasSuccess);
+}
 
 
 //---------------------------------------------------------------------------------------------------------------

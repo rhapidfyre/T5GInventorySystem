@@ -13,8 +13,8 @@
 
 #include "ItemData.generated.h"
 
-// fwd declare
-struct FStInventorySlot;
+
+DECLARE_LOG_CATEGORY_EXTERN(LogInventory, Log, Error);
 
 
 UENUM(BlueprintType)
@@ -196,12 +196,5 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
 		static bool isSameItemName(FName itemOne, FName itemTwo);
-
-	// Returns true if both item structs are identical and valid
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-	static bool IsSameItem(FStInventorySlot& SlotOne, FStInventorySlot& SlotTwo);
-	
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-	static bool IsExactSameItem(FStInventorySlot& SlotOne, FStInventorySlot& SlotTwo);
 
 };

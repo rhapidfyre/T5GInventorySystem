@@ -10,6 +10,7 @@
 #include "lib/ItemData.h"
 #include "lib/EquipmentData.h"
 #include "lib/InventorySlot.h"
+#include "GameFramework/SaveGame.h"
 
 #include "InventoryComponent.generated.h"
 
@@ -26,12 +27,13 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnNotificationAvailable);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInventoryUpdated, int, slotNumber);
 
 /* Delegate that is called on both client and server when an equipment update has occurred
- * Used so that other blueprints/classes can bind to it, running their own function when the equipment slot updates.
+ * Used so that other blueprints/classes can bind to it, rudddwnning their own function when the equipment slot updates.
  */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEquipmentUpdated, EEquipmentSlotType, SlotEnum);
 
 /* Delegate that is called whenever an item is activated. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnItemActivated, FName, itemName);
+
 
 
 UCLASS(BlueprintType, Blueprintable, ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
@@ -48,11 +50,18 @@ public:	//functions
 
     UInventoryComponent();
 
-	void InitializeInventory();
+	TMulticastDelegate<void(bool)> OnInventorySaved;
+	TMulticastDelegate<void(bool)> OnInventoryRestored;
+
+	void ReinitializeInventory();
+
+	UFUNCTION(BlueprintCallable)
+	FString SaveInventory(FString& responseStr, bool isAsync = false);
+	
+	UFUNCTION(BlueprintCallable)
+	bool LoadInventory(FString& responseStr, FString SaveSlotName, bool isAsync = false);
 
 	virtual void OnComponentCreated() override;
-
-	//virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	// Event Dispatchers/Delegates
 	UPROPERTY(BlueprintAssignable, Category = "Inventory Events")
@@ -80,28 +89,28 @@ public:	//functions
     int getNumEquipmentSlots() const { return m_equipmentSlots.Num(); }
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-		FStItemData getItemInSlot(int slotNumber, bool isEquipment = false);
+	FStItemData getItemInSlot(int slotNumber, bool isEquipment = false);
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Equipment Accessors")
-		EEquipmentSlotType getEquipmentSlotType(int slotNumber);
+	EEquipmentSlotType getEquipmentSlotType(int slotNumber);
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-		EInventorySlotType getInventorySlotType(int slotNumber);
+	EInventorySlotType getInventorySlotType(int slotNumber);
 	
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        int getTotalQuantityInAllSlots(FName itemName);
+	int getTotalQuantityInAllSlots(FName itemName);
 
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        int GetFirstEmptySlot();
+	int GetFirstEmptySlot();
 
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        float getTotalWeight(bool incEquip = false);
+	float getTotalWeight(bool incEquip = false);
 
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        float getWeightInSlot(int slotNumber);
+	float getWeightInSlot(int slotNumber);
 
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        TArray<int> getSlotsContainingItem(FName itemName);
+	TArray<int> getSlotsContainingItem(FName itemName);
 
 	/**
 	 * Returns a TArray of FStInventorySlots containing a copy of all
@@ -110,7 +119,7 @@ public:	//functions
 	 * @return TArray of FStInventorySlots copies
 	 */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-		TArray<FStInventorySlot> getInventorySlots() { return m_inventorySlots; };
+	TArray<FStInventorySlot> getInventorySlots() { return m_inventorySlots; };
 
 	/**
 	 * Returns a TArray of FStEquipmentSlots containing a copy of all
@@ -119,89 +128,101 @@ public:	//functions
 	 * @return TArray of FStEquipmentSlots copies
 	 */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Equipment Accessors")
-		TArray<FStInventorySlot> getEquipmentSlots() { return m_equipmentSlots; };
+	TArray<FStInventorySlot> getEquipmentSlots() { return m_equipmentSlots; };
 
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        int getEquipmentSlotNumber(EEquipmentSlotType equipEnum);
+	int getEquipmentSlotNumber(EEquipmentSlotType equipEnum);
     
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        FStInventorySlot getEquipmentSlot(EEquipmentSlotType equipEnum);
+	FStInventorySlot getEquipmentSlot(EEquipmentSlotType equipEnum);
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-		FStInventorySlot getEquipmentSlotByNumber(int slotNumber);
+	FStInventorySlot getEquipmentSlotByNumber(int slotNumber);
     
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-		bool IsValidSlot(int slotNumber, bool IsEquipmentSlot = false);
+	bool IsValidSlot(int slotNumber, bool IsEquipmentSlot = false);
     
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-		bool isValidEquipmentSlot(int slotNumber);
+	bool isValidEquipmentSlot(int slotNumber);
     
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-		bool isValidEquipmentSlotEnum(EEquipmentSlotType equipSlot);
+	bool isValidEquipmentSlotEnum(EEquipmentSlotType equipSlot);
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-		bool isEmptySlot(int slotNumber, bool isEquipment = false);
+	bool isEmptySlot(int slotNumber, bool isEquipment = false);
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-		bool isEquipmentSlotEmpty(EEquipmentSlotType equipSlot);
+	bool isEquipmentSlotEmpty(EEquipmentSlotType equipSlot);
 
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        FName getItemNameInSlot(int slotNumber, bool isEquipment = false);
+	FName getItemNameInSlot(int slotNumber, bool isEquipment = false);
 
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        int getQuantityInSlot(int slotNumber, bool isEquipment = false);
+	int getQuantityInSlot(int slotNumber, bool isEquipment = false);
     
     /**
     * Returns true if the inventory system has fully initialized and is ready to be operated on.
     */
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-        bool isInventoryReady() { return m_bIsInventoryReady; }
+	bool isInventoryReady() { return bIsInventoryReady; }
 	
 	UFUNCTION(BlueprintCallable, Category = "Item Management")
 	int AddItemFromExistingSlot(const FStInventorySlot& NewItem, int quantity, int SlotNumber = -1,
-		bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
+	bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
 
     UFUNCTION(BlueprintCallable, Category = "Item Management")
 	int AddItemFromDataTable(FName ItemName, int quantity, int SlotNumber = -1,
-		bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
+	bool overflowAdd = true, bool overflowDrop = true, bool showNotify = false);
 	
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-		FStInventorySlot GetCopyOfSlot(int slotNumber, bool IsEquipment = false);
+	FStInventorySlot GetCopyOfSlot(int slotNumber, bool IsEquipment = false);
 
     UFUNCTION(BlueprintCallable, Category = "Equipment Setters")
-        bool donEquipment(UInventoryComponent* fromInventory, int fromSlot, EEquipmentSlotType toSlot = EEquipmentSlotType::NONE);
+	bool donEquipment(UInventoryComponent* fromInventory, int fromSlot, EEquipmentSlotType toSlot = EEquipmentSlotType::NONE);
     
 	UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
-		bool doffEquipment(EEquipmentSlotType equipSlot, int slotNumber = -1,
+	bool doffEquipment(EEquipmentSlotType equipSlot, int slotNumber = -1,
 			UInventoryComponent* toInventory = nullptr, bool destroyResult = false);
 	
     UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
-        int removeItemByQuantity(FName itemName, int quantity = 1, bool isEquipment = false, bool dropToGround = false, bool removeAll = false);
+	int removeItemByQuantity(FName itemName, int quantity = 1, bool isEquipment = false, bool dropToGround = false, bool removeAll = false);
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
 	int removeItemFromSlot(int slotNumber = 0, int quantity = 1, bool isEquipment = false, bool showNotify = false, bool dropToGround = false, bool removeAll = false);
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
-		bool swapOrStackSlots(UInventoryComponent* fromInventory,
+	bool swapOrStackSlots(UInventoryComponent* fromInventory,
 		int fromSlotNum = 0, int toSlotNum = 0, int quantity = 1,
 		bool showNotify = false, bool isEquipmentSlot = false, bool fromEquipmentSlot = false);
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
-		bool swapOrStackWithRemainder(UInventoryComponent* fromInventory,
+	bool swapOrStackWithRemainder(UInventoryComponent* fromInventory,
 		int fromSlotNum , int toSlotNum, int quantity, int& remainder,
 		bool showNotify = false, bool isEquipmentSlot = false, bool fromEquipmentSlot = false);
 
     UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
-        bool splitStack(UInventoryComponent* fromInventory, int fromSlotNum = 0,
+	bool splitStack(UInventoryComponent* fromInventory, int fromSlotNum = 0,
         	int splitQuantity = 1, int toSlotNum = 0, bool showNotify = false);
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory Getters")
 	TArray<FStInventoryNotify> getNotifications();
+
+	UFUNCTION(BlueprintPure)
+	TArray<FStInventorySlot> CopyInventorySlots() const { return m_inventorySlots; }
+	
+	UFUNCTION(BlueprintPure)
+	TArray<FStInventorySlot> CopyEquipmentSlots() const { return m_equipmentSlots; }
 	
 private: //functions
+	
+	void RestoreInventory(
+		const TArray<FStInventorySlot>& RestoredInventory,
+		const TArray<FStInventorySlot>& RestoredEquipment);
     
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
 		FStInventorySlot& GetInventorySlot(int slotNumber, bool IsEquipment = false);
+
+	void Helper_SaveInventory(USaveGame*& SaveData) const;
 
 	int increaseQuantityInSlot(int slotNumber, int quantity, bool showNotify = false);
 	
@@ -215,11 +236,6 @@ private: //functions
 	void sendNotification(FName itemName, int quantity, bool wasAdded = true);
 
     void resetInventorySlot(int slotNumber = 0);
-
-    void InventoryUpdate(int slotNumber = 0, bool isEquipment = false, bool isAtomic = false);
-
-	UFUNCTION(NetMulticast, Unreliable)
-	void Multicast_InventoryUpdate(int slotNumber = -1, bool isEquipment = false);
 	
     bool transferItemBetweenSlots(
         UInventoryComponent* fromInventory, UInventoryComponent* toInventory,
@@ -228,8 +244,13 @@ private: //functions
 	UFUNCTION(BlueprintCallable)
     bool activateItemInSlot(int slotNumber, bool isEquipment = false, bool consumeItem = false);
 
-
 	bool setNotifyItem(FName itemName, int quantityAffected);
+	
+	UFUNCTION()
+	void LoadDataDelegate(const FString& SaveSlotName, int32 UserIndex, USaveGame* SaveData);
+
+	UFUNCTION()
+	void SaveInventoryDelegate(const FString& SaveSlotName, int32 UserIndex, USaveGame* SaveData);
 	
 public: //variables
 
@@ -244,16 +265,21 @@ public: //variables
 	bool bVerboseOutput = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
-        bool bShowNotifications = true;
+	bool bShowNotifications = true;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
-	int NumberOfInvSlots = 6;
+	int NumberOfInvSlots = 18;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
 	TArray<EEquipmentSlotType> EligibleEquipmentSlots;
 
+	// If true, saves will only work on the server.
+	// If false, saves will work on the client and server, then send the save data to the server.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory Settings")
+	bool bSavesOnServerOnly = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
-		TArray<FStStartingItem> StartingItems;
+	TArray<FStStartingItem> StartingItems;
 	
 	// If TRUE, players cannot put items in this inventory, only take from it
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -272,11 +298,17 @@ private: //variables
 	// Client Only.
     // Contains items that haven't been processed yet (notifications)
 	UPROPERTY() TArray<FStInventoryNotify> m_notifications;
-	
-    bool m_bIsInventoryReady = false;
+
+    bool bIsInventoryReady = false;
+
+	// Used to prevent clients from cheating their inventory
+	bool bInventoryRestored = false;
 
 	// Basic Empty Slot for Referencing
 	UPROPERTY() FStInventorySlot m_EmptySlot = FStInventorySlot();
+
+	FString InventorySaveSlotName_ = "";
+	int32 InventorySaveUserIndex = 0;
 
 public:
 
@@ -293,8 +325,16 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable)
 	void Server_RequestOtherInventory(UInventoryComponent* targetInventory);
 	
-	UFUNCTION(Client, Reliable, BlueprintCallable)
+	UFUNCTION(Server, Reliable, BlueprintCallable)
 	void Server_StopUseOtherInventory(UInventoryComponent* otherInventory);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable)
+	void Server_InitSavedInventory(const TArray<FStStartingItem>& StartingItemsList);
+	
+	UFUNCTION(Server, Reliable, BlueprintCallable)
+	void Server_RestoreSavedInventory(
+		const TArray<FStInventorySlot>& RestoredInventory,
+		const TArray<FStInventorySlot>& RestoredEquipment);
 	
 	
 };

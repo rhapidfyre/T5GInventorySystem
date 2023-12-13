@@ -4,6 +4,28 @@
 
 #include "InventoryData.generated.h"
 
+USTRUCT(BlueprintType)
+struct T5GINVENTORYSYSTEM_API FStStartingItem : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	FStStartingItem() {};
+	FStStartingItem(FName NewName, int NewQuantity, bool startEquipped = false);
+	
+	// The quantity of the item in this slot. Zero means empty.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int quantity = 0;
+
+	// Item Name is required. Everything else is an optional OVERRIDE.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FName startingItem = FName();
+	
+	// If true, the item will be equipped
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	bool bStartEquipped = false;
+	
+};
+
 /**
  * WARNING - If you CHANGE, ADD or REMOVE any of these enums,
  * you will need to go to       Content/AZ_Assets/DataTables
