@@ -175,7 +175,7 @@ void APickupActorBase::OnPickedUp(AActor* targetActor)
 				UInventoryComponent* invComp = targetActor->FindComponentByClass<UInventoryComponent>();
 				if (IsValid(invComp))
 				{
-					if (!invComp->bPickupItems)
+					if (!invComp->bCanPickUpItems)
 						return;
 					
 					UE_LOG(LogTemp, Display, TEXT("%s(%s): Adding Item x%d of '%s'"), *GetName(),

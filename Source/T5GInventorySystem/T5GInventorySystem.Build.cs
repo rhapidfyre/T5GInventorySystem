@@ -37,7 +37,7 @@ public class T5GInventorySystem : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-				"EnhancedInput", "TalesDungeoneer"
+				"EnhancedInput"
 			}
 			);
 		

@@ -153,7 +153,7 @@ bool UFuelComponent::IsReserveFuelAvailable()
 	{
 		for (const FName fuelItem : mAuthorizedFuel)
 		{
-			if (mInventoryFuel->getSlotsContainingItem(fuelItem).Num() > 0)
+			if (mInventoryFuel->GetSlotsWithItem(fuelItem).Num() > 0)
 			{
 				return true;
 			}
@@ -166,7 +166,7 @@ bool UFuelComponent::RemoveFuel()
 {
 	for (const FName fuelItem : mAuthorizedFuel)
 	{
-		const int itemsRemoved = mInventoryFuel->removeItemByQuantity(fuelItem, 1);
+		const int itemsRemoved = mInventoryFuel->RemoveItemByQuantity(fuelItem, 1);
 		if (itemsRemoved > 0)
 		{
 			mCurrentFuelItem = fuelItem;
@@ -190,7 +190,7 @@ int UFuelComponent::GetTotalFuelItemsAvailable()
 	{
 		for (const FName fuelItem : mAuthorizedFuel)
 		{
-			itemsAvailable += mInventoryFuel->getTotalQuantityInAllSlots(fuelItem);
+			itemsAvailable += mInventoryFuel->GetQuantityOfItem(fuelItem);
 		}
 	}
 	return itemsAvailable;
@@ -203,7 +203,7 @@ FTimespan UFuelComponent::GetTotalFuelTimeAvailable()
 	{
 		for (const FName fuelItem : mAuthorizedFuel)
 		{
-			const int ttlInSlot = mInventoryFuel->getTotalQuantityInAllSlots(fuelItem);
+			const int ttlInSlot = mInventoryFuel->GetQuantityOfItem(fuelItem);
 			const FStFuelData fuelData = UFuelSystem::getFuelItemFromName(fuelItem);
 			FTimespan burnTime = UFuelSystem::getFuelBurnTime(fuelData);
 			timespan += FTimespan::FromSeconds(burnTime.GetTotalSeconds() * ttlInSlot);

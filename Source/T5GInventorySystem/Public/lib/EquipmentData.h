@@ -5,6 +5,7 @@
 
 #include "EquipmentData.generated.h"
 
+
 /**
  * WARNING - If you CHANGE, ADD or REMOVE any of these enums,
  * you will need to go to     Content/AZ_Assets/DataTables

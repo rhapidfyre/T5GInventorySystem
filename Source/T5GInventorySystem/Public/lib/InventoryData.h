@@ -35,28 +35,35 @@ struct T5GINVENTORYSYSTEM_API FStStartingItem : public FTableRowBase
 UENUM(BlueprintType)
 enum class EInventorySlotType : uint8
 {
-	NONE     UMETA(DisplayName = "Invalid Slot"),
+	NONE		UMETA(DisplayName = "Invalid Slot"),
 	
-	GENERAL  UMETA(DisplayName = "Generic Slot"),
+	GENERAL		UMETA(DisplayName = "Generic Slot"),
 	
 	// This slot is a normal inventory slot for the player who owns it, and disabled for those who do not.
-	HIDDEN   UMETA(DisplayName = "Hidden Slot"),
+	HIDDEN		UMETA(DisplayName = "Hidden Slot"),
 	
-	EQUIP    UMETA(DisplayName = "Equipment Slot"),
+	EQUIP		UMETA(DisplayName = "Equipment Slot"),
 
 	// This slot is normal equipment for the owning player, and disabled to anyone else
-	LOCKED   UMETA(DisplayName = "Hidden Equipment Slot"),
+	LOCKED		UMETA(DisplayName = "Hidden Equipment Slot"),
 	
 	// This slot points to an existing inventory slot, aka "mirrors" it.
-	MIRROR  UMETA(DisplayName = "Mirrored Slot")
+	MIRROR		UMETA(DisplayName = "Mirrored Slot"),
+
+	MAX			UMETA(Hidden)
 };
 
 USTRUCT(BlueprintType)
 struct T5GINVENTORYSYSTEM_API FStInventoryNotify
 {
 	GENERATED_BODY()
+
+	FStInventoryNotify() {};
+	FStInventoryNotify(FName iName, int iQuantity)
+		{ itemName = iName; itemQuantity = iQuantity; }
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FName itemName = "None";
+	FName itemName = FName();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int itemQuantity = 0;

@@ -9,7 +9,8 @@
  * @param SlotTwo The second inventory slot being compared
  * @return True if the items have the same durability and name
  */
-bool UInventorySystem::IsSameItem(FStInventorySlot& SlotOne, FStInventorySlot& SlotTwo)
+bool UInventorySystem::IsSameItem(
+		const FStInventorySlot& SlotOne, const FStInventorySlot& SlotTwo)
 {
 	if (UItemSystem::isSameItemName(SlotOne.ItemName, SlotTwo.ItemName))
 	{
@@ -28,7 +29,8 @@ bool UInventorySystem::IsSameItem(FStInventorySlot& SlotOne, FStInventorySlot& S
  * @param SlotTwo The second inventory slot being compared
  * @return True if the items have the same durability, quantity, name, and stats
  */
-bool UInventorySystem::IsExactSameItem(FStInventorySlot& SlotOne, FStInventorySlot& SlotTwo)
+bool UInventorySystem::IsExactSameItem(
+		const FStInventorySlot& SlotOne, const FStInventorySlot& SlotTwo)
 {
 	if (UItemSystem::isSameItemName(SlotOne.ItemName, SlotTwo.ItemName))
 	{

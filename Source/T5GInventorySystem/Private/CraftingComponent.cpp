@@ -240,7 +240,7 @@ bool UCraftingComponent::ConsumeIngredients(int idx)
 	for (const TPair<FName, int> craftRecipe : recipeData.craftingRecipe)
 	{
 		// If we hit an ingredient that isn't present, return and continue onto the next
-		if (mInventoryInput->getTotalQuantityInAllSlots(craftRecipe.Key) < craftRecipe.Value)
+		if (mInventoryInput->GetQuantityOfItem(craftRecipe.Key) < craftRecipe.Value)
 		{
 			return false;
 		}
@@ -252,7 +252,7 @@ bool UCraftingComponent::ConsumeIngredients(int idx)
 		UE_LOG(LogTemp, Display, TEXT("%s(%s): Consuming x%d of '%s' for crafting."),
 			*GetName(), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
 			craftRecipe.Value, *craftRecipe.Key.ToString());
-		mInventoryInput->removeItemByQuantity(craftRecipe.Key, craftRecipe.Value);
+		mInventoryInput->RemoveItemByQuantity(craftRecipe.Key, craftRecipe.Value);
 	}
 	return true;
 }

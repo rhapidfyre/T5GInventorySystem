@@ -106,6 +106,11 @@ struct T5GINVENTORYSYSTEM_API FStItemData : public FTableRowBase
 	// Value of the item, in base credits
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int basePrice = 1;
+	
+	// If TRUE, this item exists and can be acted on but does not exist for all intents and purposes.
+	// Useful for things like not dropping the item on death
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bIgnoreItem = false;
+
 };
 
 UCLASS()
