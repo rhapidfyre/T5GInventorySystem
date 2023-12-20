@@ -22,7 +22,9 @@ public:
 	void SetSaveName(const FString& SaveSlotName)
 	{
 		if (InventorySaveSlotName_.IsEmpty())
+		{
 			InventorySaveSlotName_ = SaveSlotName;
+		}
 	}
 	FString GetSaveSlotName() const { return InventorySaveSlotName_; }
 

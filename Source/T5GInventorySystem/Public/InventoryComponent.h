@@ -56,6 +56,13 @@ public:	//functions
 
 	UFUNCTION(BlueprintCallable)
 	FString SaveInventory(FString& responseStr, bool isAsync = false);
+
+	UFUNCTION(BlueprintPure)
+	FString GetInventorySaveName() const { return DoesInventorySaveExist() ? SaveSlotName_ : ""; }
+
+	// If the restore boolean is set, this inventory has an associated save
+	UFUNCTION(BlueprintPure)
+	bool DoesInventorySaveExist() const { return bInventoryRestored; }
 	
 	UFUNCTION(BlueprintCallable)
 	bool LoadInventory(
@@ -257,16 +264,20 @@ private: //functions
 	
 public: //variables
 
+	// Subdirectory where the save games should go
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory Settings")
+	FString SavePath = "Inventories/";
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool bCanPickUpItems = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory Settings")
 	bool bShowNotifications = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory Settings")
 	int NumberOfInvSlots = 24;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory Settings")
 	TArray<EEquipmentSlotType> EligibleEquipmentSlots;
 
 	// If true, saves will only work on the server.
@@ -274,11 +285,11 @@ public: //variables
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory Settings")
 	bool bSavesOnServer = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory Settings")
 	TArray<FStStartingItem> StartingItems;
 	
 	// If TRUE, players cannot put items in this inventory, only take from it
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory Settings")
 	bool WithdrawOnly = false;
 
 private: //variables

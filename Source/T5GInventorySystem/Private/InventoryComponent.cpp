@@ -28,30 +28,30 @@ void UInventoryComponent::BeginPlay()
 {
     if (bShowDebug)
     {
-        UE_LOGFMT(LogTemp, Display, "{InventoryName}}({Sv}): BeginPlay()",
-            GetName(), HasAuthority()?"SV":"CL");
+        UE_LOGFMT(LogTemp, Display, "{InventoryName}({Sv}): BeginPlay()",
+            GetName(), HasAuthority()?"SRV":"CLI");
     }
     Super::BeginPlay();
     
     const AActor* ownerActor = GetOwner();
     if (!IsValid(ownerActor))
     {
-        UE_LOGFMT(LogTemp, Error, "{InventoryName}} has no owner. Removed.", GetName());
+        UE_LOGFMT(LogTemp, Error, "{InventoryName} has no owner. Removed.", GetName());
         this->DestroyComponent(); // Kills itself, it failed validation
     }
 	
-	UE_LOGFMT(LogTemp, Display, "InventoryComponent({Sv}}): Began Play with %d Inventory Slots and %d Equipment Slots",
-		HasAuthority()?"SV":"CL", GetNumberOfSlots(), GetNumberOfSlots(true));
+	UE_LOGFMT(LogTemp, Display, "InventoryComponent({Sv}): Began Play with {iNum} Inventory Slots and {eNum} Equipment Slots",
+		HasAuthority()?"SRV":"CLI", GetNumberOfSlots(), GetNumberOfSlots(true));
 
     if (!IsValid(UItemSystem::getItemDataTable()))
     {
         UE_LOGFMT(LogEngine, Error, "{InventoryName}({Sv}): Item Data Table Not Found!",
-            GetName(), HasAuthority()?"SV":"CL");
+            GetName(), HasAuthority()?"SRV":"CLI");
     }
     else
     {
         UE_LOGFMT(LogEngine, Display, "{InventoryName}({Sv}): Data Table Was Found",
-            GetName(), HasAuthority()?"SV":"CL");
+            GetName(), HasAuthority()?"SRV":"CLI");
     }
 }
 
@@ -140,7 +140,7 @@ void UInventoryComponent::ReinitializeInventory()
 		}
     	
 		UE_LOGFMT(LogTemp, Display, "{OwnerName}({Authority}): Reinitialized. Found {nItems} Starting Items",
-			OwnerCharacter->GetName(), HasAuthority()?"SV":"CL", StartingItems.Num());
+			OwnerCharacter->GetName(), HasAuthority()?"SRV":"CLI", StartingItems.Num());
 
 		bIsInventoryReady = true;
 	}
@@ -204,13 +204,13 @@ void UInventoryComponent::IssueStartingItems()
 			{
 				UE_LOGFMT(LogTemp, Warning,
 					"{InvName}({Server})}: Starting Item '{ItemName}' failed to get added",
-					GetName(), HasAuthority()?"SV":"CL", itemName);
+					GetName(), HasAuthority()?"SRV":"CLI", itemName);
 			}
 			else
 			{
 				UE_LOGFMT(LogTemp, Warning,
 					"{InvName}({Server})}: x{Amount} of '{ItemName}' Added to Slot #{SlotNum}",
-					GetName(), HasAuthority()?"SV":"CL", itemsAdded, itemName, slotNum);
+					GetName(), HasAuthority()?"SRV":"CLI", itemsAdded, itemName, slotNum);
 			}
 		}
 	}
@@ -243,7 +243,7 @@ void UInventoryComponent::SetInventoryInUse(AActor* UseActor, bool isInUse)
 			{
 				UE_LOGFMT(LogTemp, Log,
 					"{InvName}({Server})}: Is no longer in use.",
-					GetName(), GetName(), HasAuthority()?"SV":"CL");
+					GetName(), GetName(), HasAuthority()?"SRV":"CLI");
 				InUseByActors_.Remove(UseActor);
 			}
 		}
@@ -254,19 +254,19 @@ void UInventoryComponent::SetInventoryInUse(AActor* UseActor, bool isInUse)
 			{
 				UE_LOGFMT(LogTemp, Log,
 					"{InvName}({Server})}: Is now being used by {UseActor}",
-					GetName(), HasAuthority()?"SV":"CL", UseActor->GetName());
+					GetName(), HasAuthority()?"SRV":"CLI", UseActor->GetName());
 				InUseByActors_.Add(UseActor);
 			}
 		}
 		UE_LOGFMT(LogTemp, Log,
 			"{InvName}({Server})}: SetInventoryInUse() Unchanged (Same Actor, Same Status)",
-			GetName(), GetName(), HasAuthority()?"SV":"CL");
+			GetName(), GetName(), HasAuthority()?"SRV":"CLI");
 	}
 	else
 	{
 		UE_LOGFMT(LogTemp, Log,
 			"{InvName}({Server})}: SetInventoryInUse() received invalid UseActor.",
-			GetName(),  HasAuthority()?"SV":"CL");
+			GetName(),  HasAuthority()?"SRV":"CLI");
 	}
 }
 
@@ -284,7 +284,11 @@ void UInventoryComponent::RestoreInventory(
 	const bool doClientSave = ! HasAuthority() && ! bSavesOnServer;
 	if ( !doServerSave || !doClientSave || bInventoryRestored)
 	{
-		return;
+		const ENetMode netMode = GetNetMode();
+		if (netMode != NM_ListenServer && netMode != NM_Standalone)
+		{
+			return;
+		}
 	}
 	
 	bIsInventoryReady = false;
@@ -330,8 +334,13 @@ FString UInventoryComponent::SaveInventory(FString& responseStr, bool isAsync)
 	const bool doClientSave = ! HasAuthority() && ! bSavesOnServer;
 	if ( !doServerSave || !doClientSave || !GetIsInventoryReady())
 	{
-		responseStr = "Authority Violation when Saving Inventory!";
-		return FString();
+		// Always allow save if this client is the listen server or standalone
+		const ENetMode netMode = GetNetMode();
+		if (netMode != NM_ListenServer && netMode != NM_Standalone)
+		{
+			responseStr = "Authority Violation when Saving Inventory!";
+			return FString();
+		}
 	}
 	
 	// The inventory save file does not exist, if the string is empty.
@@ -341,20 +350,19 @@ FString UInventoryComponent::SaveInventory(FString& responseStr, bool isAsync)
 		FString TempSaveName;
 		do
 		{
-			for (int i = 0; i < 16; i++)
+			for (int i = 0; i < 18; i++)
 			{
 				TArray<int> RandValues = {
 					FMath::RandRange(48,57), // Numbers 0-9
-					FMath::RandRange(65,90), // Lowercase a-z
-					FMath::RandRange(97,122) // Uppercase A-Z
+					FMath::RandRange(65,90) // Uppercase A-Z
 				};
-				const char RandChar = static_cast<char>(RandValues[FMath::RandRange(0,2)]);
+				const char RandChar = static_cast<char>(RandValues[FMath::RandRange(0,RandValues.Num()-1)]);
 				TempSaveName.AppendChar(RandChar);
 			}
 		}
 		// Loop until a unique save string has been created
 		while (UGameplayStatics::DoesSaveGameExist(TempSaveName, 0));
-		SaveSlotName_ = TempSaveName;
+		SaveSlotName_ = SavePath + TempSaveName;
 	}
 
 	// If still empty, there was a problem with the save slot name
@@ -398,6 +406,9 @@ FString UInventoryComponent::SaveInventory(FString& responseStr, bool isAsync)
 			InventorySave->SetSaveName(SaveSlotName_);
 			Helper_SaveInventory(SaveData);
 			responseStr = "Successful Synchronous Save";
+			UE_LOGFMT(LogInventory, Log, "{InventoryName}({Sv}): "
+				"Successfully Saved Inventory '{InventorySave} ({OwnerName})",
+				GetName(), HasAuthority()?"SRV":"CLI", SaveSlotName_, GetOwner()->GetName());
 			return SaveSlotName_;
 		}
 	}
@@ -418,12 +429,17 @@ bool UInventoryComponent::LoadInventory(
 		FString& responseStr, FString SaveSlotName, bool isAsync)
 {
 	responseStr = "Failed to Save (Inventory Has Not Initialized)";
-	const bool doServerSave =	HasAuthority() &&   bSavesOnServer;
+	const bool doServerSave =	(HasAuthority() &&   bSavesOnServer);
 	const bool doClientSave = ! HasAuthority() && ! bSavesOnServer;
 	if ( !doServerSave || !doClientSave || bInventoryRestored)
 	{
-		responseStr = "Authority Violation when Loading Inventory '"+SaveSlotName+"'";
-		return false;
+		// Always allow save if this client is the listen server or standalone
+		const ENetMode netMode = GetNetMode();
+		if (netMode != NM_ListenServer && netMode != NM_Standalone)
+		{
+			responseStr = "Authority Violation when Loading Inventory '"+SaveSlotName+"'";
+			return false;
+		}
 	}
 	
 	if (bIsInventoryReady)
@@ -483,7 +499,7 @@ int UInventoryComponent::GetNumberOfSlots(bool isEquipment) const
 EInventorySlotType UInventoryComponent::GetSlotTypeInventory(int slotNumber) const
 {
 	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): GetSlotTypeInventory({SlotNum})",
-		GetName(), HasAuthority()?"SV":"CL", slotNumber);
+		GetName(), HasAuthority()?"SRV":"CLI", slotNumber);
 	return GetCopyOfSlot(slotNumber, false).SlotType;
 }
 
@@ -496,7 +512,7 @@ EInventorySlotType UInventoryComponent::GetSlotTypeInventory(int slotNumber) con
 EEquipmentSlotType UInventoryComponent::GetSlotTypeEquipment(int slotNumber) const
 {
 	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): GetSlotTypeEquipment({SlotNum})",
-		GetName(), HasAuthority()?"SV":"CL", slotNumber);
+		GetName(), HasAuthority()?"SRV":"CLI", slotNumber);
 	return GetCopyOfSlot(slotNumber, true).EquipType;
 }
 
@@ -509,7 +525,7 @@ EEquipmentSlotType UInventoryComponent::GetSlotTypeEquipment(int slotNumber) con
 int UInventoryComponent::GetQuantityOfItem(FName itemName, bool checkEquipment) const
 {
 	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): GetQuantityOfItem({SlotNum})",
-		GetName(), HasAuthority()?"SV":"CL", itemName);
+		GetName(), HasAuthority()?"SRV":"CLI", itemName);
 
     int total = 0;
     for (int i = 0; i < GetNumberOfSlots(checkEquipment); i++)
@@ -537,12 +553,12 @@ int UInventoryComponent::GetFirstEmptySlotNumber(bool checkEquipment) const
         if (IsSlotEmpty(i, checkEquipment))
         {
         	UE_LOGFMT(LogTemp, Display, "GetFirstEmptySlotNumber({Sv}): Empty {SlotType} Found @ {SlotNum}",
-				HasAuthority()?"SV":"CL", HasAuthority()?"SV":"CL", i);
+				HasAuthority()?"SRV":"CLI", HasAuthority()?"SRV":"CLI", i);
 	        return i;
         }
     }
 	UE_LOGFMT(LogTemp, Display, "GetFirstEmptySlotNumber({Sv}): No Empty {SlotType} Found",
-		HasAuthority()?"SV":"CL", HasAuthority()?"SV":"CL");
+		HasAuthority()?"SRV":"CLI", HasAuthority()?"SRV":"CLI");
     return -1;
 }
 
@@ -572,7 +588,7 @@ float UInventoryComponent::GetWeightTotal(bool incEquip) const
 		}
 	}
 	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): Total Inventory Weight = {Weight}",
-		GetName(), HasAuthority()?"SV":"CL", totalWeight);
+		GetName(), HasAuthority()?"SRV":"CLI", totalWeight);
     return totalWeight;
 }
 
@@ -593,14 +609,14 @@ float UInventoryComponent::getWeightInSlot(int slotNumber, bool isEquipmentSlot)
     		* GetSlotQuantity(slotNumber, isEquipmentSlot);
     	
     	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): Weight of Slot {SlotNum} ({InvEquip}) = {Weight}",
-			GetName(), HasAuthority()?"SV":"CL", slotNumber,
+			GetName(), HasAuthority()?"SRV":"CLI", slotNumber,
 			isEquipmentSlot?"Inventory Slot":"Equipment Slot", weight);
     	
         return weight;
     }
     	
 	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): Weight of Slot {SlotNum} ({InvEquip}) = 0 (Empty or Invalid Slot)",
-		GetName(), HasAuthority()?"SV":"CL", slotNumber,
+		GetName(), HasAuthority()?"SRV":"CLI", slotNumber,
 		isEquipmentSlot?"Inventory Slot":"Equipment Slot");
 	
     return 0.0f;
@@ -631,12 +647,12 @@ TArray<int> UInventoryComponent::GetSlotsWithItem(FName itemName) const
 				SlotString.Append(", " + FString::FromInt(foundSlots[i]));
 			}
 			UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): Slots Containing '{ItemName}': {SlotList}",
-				GetName(), HasAuthority()?"SV":"CL", itemName, SlotString);
+				GetName(), HasAuthority()?"SRV":"CLI", itemName, SlotString);
 		}
 		else
 		{
 			UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): No Slots contain the item '{ItemName}'",
-				GetName(), HasAuthority()?"SV":"CL", itemName);
+				GetName(), HasAuthority()?"SRV":"CLI", itemName);
 		}
 	}
     return foundSlots;
@@ -651,25 +667,25 @@ TArray<int> UInventoryComponent::GetSlotsWithItem(FName itemName) const
 FStInventorySlot& UInventoryComponent::GetSlot(int slotNumber, bool IsEquipmentSlot)
 {
 	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): GetSlot({SlotNum})",
-		GetName(), HasAuthority()?"SV":"CL", slotNumber);
+		GetName(), HasAuthority()?"SRV":"CLI", slotNumber);
 	
     if (!IsValidSlot(slotNumber, IsEquipmentSlot))
     {
     	FStInventorySlot* EmptySlot = new FStInventorySlot();
     	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): GetSlot({SlotNum}) returned Empty Slot (Invalid Slot)",
-			GetName(), HasAuthority()?"SV":"CL", slotNumber);
+			GetName(), HasAuthority()?"SRV":"CLI", slotNumber);
 	    return *EmptySlot;
     }
 	
 	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): GetSlot({SlotNum}) executed Successfully",
-		GetName(), HasAuthority()?"SV":"CL", slotNumber);
+		GetName(), HasAuthority()?"SRV":"CLI", slotNumber);
     return IsEquipmentSlot ? EquipmentSlots_[slotNumber] : InventorySlots_[slotNumber];
 }
 
 TArray<FStInventorySlot> UInventoryComponent::GetCopyOfAllSlots(bool getEquipmentSlots) const
 {
 	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): Getting an array of all {SlotType}s",
-		GetName(), HasAuthority()?"SV":"CL", getEquipmentSlots ? "Equipment Slot" : "Inventory Slot");
+		GetName(), HasAuthority()?"SRV":"CLI", getEquipmentSlots ? "Equipment Slot" : "Inventory Slot");
 	return getEquipmentSlots ? EquipmentSlots_ : InventorySlots_;
 }
 
@@ -691,14 +707,14 @@ int UInventoryComponent::GetSlotNumberFromEquipmentType(EEquipmentSlotType equip
             {
             	UE_LOGFMT(LogTemp, Display,
             		"{Inventory}({Sv}): Equipment Slot '{SlotEnum}' is Slot Number {SlotNum}",
-					GetName(), HasAuthority()?"SV":"CL", UEnum::GetValueAsString(equipEnum), i);
+					GetName(), HasAuthority()?"SRV":"CLI", UEnum::GetValueAsString(equipEnum), i);
                 return i;
             }
         }
     }
 	UE_LOGFMT(LogTemp, Warning,
 		"{Inventory}({Sv}): No Equipment Slot Exists for Enum '{SlotEnum}'",
-		GetName(), HasAuthority()?"SV":"CL", UEnum::GetValueAsString(equipEnum));
+		GetName(), HasAuthority()?"SRV":"CLI", UEnum::GetValueAsString(equipEnum));
     return -1;
 }
 
@@ -716,7 +732,7 @@ bool UInventoryComponent::IsValidSlot(int slotNumber, bool IsEquipmentSlot) cons
 		: InventorySlots_.IsValidIndex(slotNumber);
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): Validity Check... '{SlotNumber}' ({SlotType}) - {Validity}",
-		GetName(), HasAuthority()?"SV":"CL", slotNumber,
+		GetName(), HasAuthority()?"SRV":"CLI", slotNumber,
 		IsEquipmentSlot ? "Equipment Slot" : "Inventory Slot",
 		slotValid ? "Valid Slot" : "INVALID SLOT");
 	return slotValid;
@@ -738,14 +754,14 @@ bool UInventoryComponent::IsValidEquipmentSlotEnum(EEquipmentSlotType equipSlot)
             {
             	UE_LOGFMT(LogTemp, Display,
 					"{Inventory}({Sv}): Equipment Enum '{SlotEnum}' is a VALID Equipment Slot",
-					GetName(), HasAuthority()?"SV":"CL", UEnum::GetValueAsString(equipSlot));
+					GetName(), HasAuthority()?"SRV":"CLI", UEnum::GetValueAsString(equipSlot));
 	            return true;
             }
         }
     }
 	UE_LOGFMT(LogTemp, Display,
 		"{Inventory}({Sv}): Equipment Enum '{SlotEnum}' is NOT a valid Equipment Slot",
-		GetName(), HasAuthority()?"SV":"CL", UEnum::GetValueAsString(equipSlot));
+		GetName(), HasAuthority()?"SRV":"CLI", UEnum::GetValueAsString(equipSlot));
     return false;
 }
 
@@ -762,14 +778,14 @@ bool UInventoryComponent::IsSlotEmpty(int slotNumber, bool isEquipment) const
     {
     	UE_LOGFMT(LogTemp, Display,
 			"{Inventory}({Sv}): {SlotType} #{SlotNum} is NOT an Empty Slot, or is an INVALID slot!",
-			GetName(), HasAuthority()?"SV":"CL",
+			GetName(), HasAuthority()?"SRV":"CLI",
 			isEquipment ? "Equipment Slot" : "Inventory Slot", slotNumber);
 	    return false;
     }
 	const bool isEmpty = GetSlotQuantity(slotNumber, isEquipment) < 1;
 	UE_LOGFMT(LogTemp, Display,
 		"{Inventory}({Sv}): {SlotType} #{SlotNum} is {EmptyStatus}",
-		GetName(), HasAuthority()?"SV":"CL",
+		GetName(), HasAuthority()?"SRV":"CLI",
 		isEquipment ? "Equipment Slot" : "Inventory Slot", slotNumber,
 		isEmpty ? "EMPTY" : "NOT Empty");
     return isEmpty;
@@ -803,13 +819,13 @@ FName UInventoryComponent::GetNameOfItemInSlot(int slotNumber, bool isEquipment)
 		const FStInventorySlot InventorySlot = GetCopyOfSlot(slotNumber, isEquipment);
 		UE_LOGFMT(LogTemp, Display,
 			"{Inventory}({Sv}): Item in {SlotType} #{SlotNum} is '{ItemName}'",
-			GetName(), HasAuthority()?"SV":"CL",
+			GetName(), HasAuthority()?"SRV":"CLI",
 			isEquipment ? "Equipment Slot" : "Inventory Slot", InventorySlot.ItemName);
 		return InventorySlot.ItemName;
 	}
 	UE_LOGFMT(LogTemp, Display,
 		"{Inventory}({Sv}): Item in {SlotType} #{SlotNum} is '-EMPTY SLOT-'",
-		GetName(), HasAuthority()?"SV":"CL",
+		GetName(), HasAuthority()?"SRV":"CLI",
 		isEquipment ? "Equipment Slot" : "Inventory Slot");
     return FName();
 }
@@ -829,7 +845,7 @@ int UInventoryComponent::GetSlotQuantity(int slotNumber, bool isEquipment) const
     const int slotQuantity = GetCopyOfSlot(slotNumber,isEquipment).SlotQuantity;
     UE_LOGFMT(LogTemp, Display,
     	"{Inventory}({Sv}): Equipment Slot #{SlotNum} - Quantity = {Amount}",
-    	GetName(), HasAuthority()?"SV":"CL",
+    	GetName(), HasAuthority()?"SRV":"CLI",
     	isEquipment ? "Equipment Slot" : "Inventory Slot",
     	slotNumber, slotQuantity);
     return slotQuantity;
@@ -853,7 +869,7 @@ int UInventoryComponent::AddItemFromExistingSlot(const FStInventorySlot& Invento
     {
     	UE_LOGFMT(LogTemp, Display,
 			"{Inventory}({Sv}): AddItemFromExistingSlot Failed - Existing Slot is Empty",
-			GetName(), HasAuthority()?"SV":"CL");
+			GetName(), HasAuthority()?"SRV":"CLI");
 	    return -1;
     }
     
@@ -948,7 +964,7 @@ int UInventoryComponent::AddItemFromExistingSlot(const FStInventorySlot& Invento
         {
             UE_LOGFMT(LogTemp, Display,
             	"{Inventory}({Sv}): AddItemFromExistingSlot() Failed - Inventory Full",
-                GetName(), HasAuthority()?"SV":"CL");
+                GetName(), HasAuthority()?"SRV":"CLI");
             break;
         }
         
@@ -965,7 +981,7 @@ int UInventoryComponent::AddItemFromExistingSlot(const FStInventorySlot& Invento
     {
         UE_LOGFMT(LogTemp, Error,
         	"{Inventory}({Sv}): AddItemFromExistingSlot() - Terminated an Infinite Loop",
-            GetName(), HasAuthority()?"SV":"CL");
+            GetName(), HasAuthority()?"SRV":"CLI");
         return RemainingQuantity;
     }
 
@@ -979,7 +995,7 @@ int UInventoryComponent::AddItemFromExistingSlot(const FStInventorySlot& Invento
         	UE_LOGFMT(LogTemp, Error,
 				"{Inventory}({Sv}): AddItemFromExistingSlot() - Invalid Mesh. "
 				"Cannot spawn Pick Up actor! {NumStart} Requested. {NumAdded} Added, {NumLeft} Remaining", 
-				GetName(), HasAuthority()?"SV":"CL", quantity, quantity - RemainingQuantity, RemainingQuantity);
+				GetName(), HasAuthority()?"SRV":"CLI", quantity, quantity - RemainingQuantity, RemainingQuantity);
 	        return RemainingQuantity;
         }
 
@@ -1007,7 +1023,7 @@ int UInventoryComponent::AddItemFromExistingSlot(const FStInventorySlot& Invento
 	UE_LOGFMT(LogTemp, Display,
 		"{Inventory}({Sv}): AddItemFromExistingSlot() Finished - {NumStart} Requested."
 		"{NumAdded} Added, {NumRemain} Remaining",
-		GetName(), HasAuthority()?"SV":"CL", quantity, quantity - RemainingQuantity, RemainingQuantity);
+		GetName(), HasAuthority()?"SRV":"CLI", quantity, quantity - RemainingQuantity, RemainingQuantity);
     return RemainingQuantity;
 
 }
@@ -1030,7 +1046,7 @@ int UInventoryComponent::AddItemFromDataTable(FName ItemName, int quantity, int 
     {
     	UE_LOGFMT(LogTemp, Display,
 			"{Inventory}({Sv}): AddItemFromDataTable() - Item '{ItemName}' is not a valid item",
-			GetName(), HasAuthority()?"SV":"CL", ItemName);
+			GetName(), HasAuthority()?"SRV":"CLI", ItemName);
 	    return -1;
     }
 
@@ -1044,7 +1060,7 @@ int UInventoryComponent::AddItemFromDataTable(FName ItemName, int quantity, int 
         {
         	UE_LOGFMT(LogTemp, Error,
 				"{Inventory}({Sv}): AddItemFromDataTable() Failed - Slot {SlotNum} is not a valid Inventory Slot",
-				GetName(), HasAuthority()?"SV":"CL", SlotNumber);
+				GetName(), HasAuthority()?"SRV":"CLI", SlotNumber);
 	        return -2;
         }
 
@@ -1053,7 +1069,7 @@ int UInventoryComponent::AddItemFromDataTable(FName ItemName, int quantity, int 
         {
         	UE_LOGFMT(LogTemp, Warning,
 				"{Inventory}({Sv}): AddItemFromDataTable() Failed - Inventory Full",
-				GetName(), HasAuthority()?"SV":"CL", ItemName);
+				GetName(), HasAuthority()?"SRV":"CLI", ItemName);
 	        return -3;
         }
     }
@@ -1063,7 +1079,7 @@ int UInventoryComponent::AddItemFromDataTable(FName ItemName, int quantity, int 
     {
     	UE_LOGFMT(LogTemp, Display,
 			"{Inventory}({Sv}): AddItemFromDataTable() Failed - Invalid Quantity ({Quantity}) Specified",
-			GetName(), HasAuthority()?"SV":"CL", quantity);
+			GetName(), HasAuthority()?"SRV":"CLI", quantity);
 	    return -4;
     }
 
@@ -1081,7 +1097,7 @@ int UInventoryComponent::AddItemFromDataTable(FName ItemName, int quantity, int 
     	UE_LOGFMT(LogTemp, Display,
 			"{Inventory}({Sv}): AddItemFromDataTable() - Finished. "
 			"{NumStart} Requested. {NumAdded} Added, {NumRemain} Remaining",
-			GetName(), HasAuthority()?"SV":"CL", quantity, ItemsAdded, RemainingQuantity);
+			GetName(), HasAuthority()?"SRV":"CLI", quantity, ItemsAdded, RemainingQuantity);
     }
 	else
 	{
@@ -1089,7 +1105,7 @@ int UInventoryComponent::AddItemFromDataTable(FName ItemName, int quantity, int 
 			"{Inventory}({Sv}): AddItemFromDataTable() Failed - "
 			"Misfire of internal request to AddItemFromExistingSlot(). "
 			"{NumStart} Requested. {NumAdded} Added, {NumRemain} Remaining",
-			GetName(), HasAuthority()?"SV":"CL", quantity, ItemsAdded, RemainingQuantity);
+			GetName(), HasAuthority()?"SRV":"CLI", quantity, ItemsAdded, RemainingQuantity);
 	}
     return ItemsAdded;
 }
@@ -1106,13 +1122,13 @@ FStInventorySlot UInventoryComponent::GetCopyOfSlot(int slotNumber, bool IsEquip
 	{
 		UE_LOGFMT(LogTemp, Display,
 			"{Inventory}({Sv}): Copy of {SlotType} #{SlotNumber} Requested",
-			GetName(), HasAuthority()?"SV":"CL",
+			GetName(), HasAuthority()?"SRV":"CLI",
 			IsEquipment ? "Equipment Slot" : "Inventory Slot", slotNumber);
 		return InventorySlots_[slotNumber];
 	}
 	UE_LOGFMT(LogTemp, Display,
 		"{Inventory}({Sv}): Copy of {SlotType} #{SlotNumber} Failed - Invalid Slot",
-		GetName(), HasAuthority()?"SV":"CL",
+		GetName(), HasAuthority()?"SRV":"CLI",
 		IsEquipment ? "Equipment Slot" : "Inventory Slot", slotNumber);
     return FStInventorySlot();
 }
@@ -1139,7 +1155,7 @@ bool UInventoryComponent::donEquipment(UInventoryComponent* fromInventory, int f
     {
     	UE_LOGFMT(LogTemp, Display,
 			"{Inventory}({Sv}): DonEquipment Failed - '{ItemName}' is not a valid item",
-			GetName(), HasAuthority()?"SV":"CL", InventorySlot.ItemName);
+			GetName(), HasAuthority()?"SRV":"CLI", InventorySlot.ItemName);
 	    return false;
     }
 
@@ -1177,7 +1193,7 @@ bool UInventoryComponent::donEquipment(UInventoryComponent* fromInventory, int f
         	UE_LOGFMT(LogTemp, Display,
 				"{Inventory}({Sv}): DonEquipment Failed - "
 				"Equipment Slot #{NumSlot} is not a valid Equipment Slot",
-				GetName(), HasAuthority()?"SV":"CL", slotNumber);
+				GetName(), HasAuthority()?"SRV":"CLI", slotNumber);
 	        return false;
         }
 
@@ -1187,7 +1203,7 @@ bool UInventoryComponent::donEquipment(UInventoryComponent* fromInventory, int f
         	UE_LOGFMT(LogTemp, Display,
 				"{Inventory}({Sv}): DonEquipment Failed - "
 				"Equipment Slot #{NumSlot} is a mismatch (of Type '{SlotType}', Need '{EquipType}')",
-				GetName(), HasAuthority()?"SV":"CL", slotNumber,
+				GetName(), HasAuthority()?"SRV":"CLI", slotNumber,
 				UEnum::GetValueAsString(EquipSlotData.EquipType),
 				UEnum::GetValueAsString(eSlot));
 	        return false;
@@ -1207,7 +1223,7 @@ bool UInventoryComponent::donEquipment(UInventoryComponent* fromInventory, int f
     	UE_LOGFMT(LogTemp, Display,
 			"{Inventory}({Sv}): DonEquipment() - "
 			"Successfully Equipped '{ItemName}' into Slot #{SlotNum}",
-			GetName(), HasAuthority()?"SV":"CL",
+			GetName(), HasAuthority()?"SRV":"CLI",
 			slotNumber, InventorySlot.ItemName,	UEnum::GetValueAsString(EquipSlotData.EquipType),
 			UEnum::GetValueAsString(eSlot));
         return true;
@@ -1239,7 +1255,7 @@ bool UInventoryComponent::doffEquipment(EEquipmentSlotType equipSlot, int slotNu
     {
 	    UE_LOGFMT(LogTemp, Warning,
 			"{Inventory}({Sv}): DoffEquipment() Failed - Inventory Not Ready.",
-			GetName(), HasAuthority()?"SV":"CL", slotNumber);
+			GetName(), HasAuthority()?"SRV":"CLI", slotNumber);
     	return false;
     }
 	
@@ -1251,7 +1267,7 @@ bool UInventoryComponent::doffEquipment(EEquipmentSlotType equipSlot, int slotNu
         	UE_LOGFMT(LogTemp, Display,
 				"{Inventory}({Sv}): DoffEquipment() Failed - "
 				"Destination Inventory Slot #{InvSlot} is not empty.",
-				GetName(), HasAuthority()?"SV":"CL", slotNumber);
+				GetName(), HasAuthority()?"SRV":"CLI", slotNumber);
 	        return false;
         }
     }
@@ -1274,7 +1290,7 @@ bool UInventoryComponent::doffEquipment(EEquipmentSlotType equipSlot, int slotNu
 			UE_LOGFMT(LogTemp, Error,
 				"{Inventory}({Sv}): DoffEquipment() - "
 				"Internal Request to RemoveItemFromSlot() Failed",
-				GetName(), HasAuthority()?"SV":"CL");
+				GetName(), HasAuthority()?"SRV":"CLI");
 			return false;
 		}
 		
@@ -1286,7 +1302,7 @@ bool UInventoryComponent::doffEquipment(EEquipmentSlotType equipSlot, int slotNu
 			UE_LOGFMT(LogTemp, Error,
 				"{Inventory}({Sv}): DoffEquipment() - "
 				"Internal Request to AddItemFromExistingSlot() Failed",
-				GetName(), HasAuthority()?"SV":"CL", slotNumber);
+				GetName(), HasAuthority()?"SRV":"CLI", slotNumber);
 			return false;
 		}
 		
@@ -1294,7 +1310,7 @@ bool UInventoryComponent::doffEquipment(EEquipmentSlotType equipSlot, int slotNu
 	UE_LOGFMT(LogTemp, Display,
 		"{Inventory}({Sv}): DoffEquipment() Successfully doffed "
 		"'{ItemName}' into Inventory Slot {SlotNum}",
-		GetName(), HasAuthority()?"SV":"CL", FromInventorySlotCopy.ItemName, slotNumber);
+		GetName(), HasAuthority()?"SRV":"CLI", FromInventorySlotCopy.ItemName, slotNumber);
 	return true;
 }
 
@@ -1323,7 +1339,7 @@ int UInventoryComponent::RemoveItemFromSlot(
     {
 	    UE_LOGFMT(LogTemp, Error,
 			"{Inventory}({Sv}): RemoveItemFromSlot() Failed - Inventory Not Ready",
-			GetName(), HasAuthority()?"SV":"CL");
+			GetName(), HasAuthority()?"SRV":"CLI");
     	return -1;
     }
 	
@@ -1332,7 +1348,7 @@ int UInventoryComponent::RemoveItemFromSlot(
 	    UE_LOGFMT(LogTemp, Error,
 			"{Inventory}({Sv}): RemoveItemFromSlot() Failed - "
 			"{SlotType} #{SlotNum} is not a valid Slot",
-			GetName(), HasAuthority()?"SV":"CL",
+			GetName(), HasAuthority()?"SRV":"CLI",
 			isEquipment ? "Equipment Slot" : "Inventory Slot", slotNumber);
     	return -1;
     }
@@ -1343,7 +1359,7 @@ int UInventoryComponent::RemoveItemFromSlot(
 		UE_LOGFMT(LogTemp, Error,
 			"{Inventory}({Sv}): RemoveItemFromSlot() Failed - "
 			"{SlotType} #{SlotNum} is an Empty Slot",
-			GetName(), HasAuthority()?"SV":"CL",
+			GetName(), HasAuthority()?"SRV":"CLI",
 			isEquipment ? "Equipment Slot" : "Inventory Slot", slotNumber);
 		return -1;
 	}
@@ -1395,7 +1411,7 @@ int UInventoryComponent::RemoveItemFromSlot(
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): RemoveItemFromSlot() Finished - "
 		"{StartQty} Requested. {NumRemoved} Removed, {NumRemain} Remaining",
-		GetName(), HasAuthority()?"SV":"CL", quantity, itemsRemoved, quantity - itemsRemoved);
+		GetName(), HasAuthority()?"SRV":"CLI", quantity, itemsRemoved, quantity - itemsRemoved);
 	return itemsRemoved;
 }
 
@@ -1423,7 +1439,7 @@ int UInventoryComponent::RemoveItemByQuantity(
     {
     	UE_LOGFMT(LogTemp, Warning,
 			"{Inventory}({Sv}): RemoveItemByQuantity() Failed - Inventory Not Ready",
-			GetName(), HasAuthority()?"SV":"CL");
+			GetName(), HasAuthority()?"SRV":"CLI");
 	    return -1;
     }
 	
@@ -1432,7 +1448,7 @@ int UInventoryComponent::RemoveItemByQuantity(
     	UE_LOGFMT(LogTemp, Error,
 			"{Inventory}({Sv}): RemoveItemFromSlot() Failed - "
 			"'{ItemName}' is not a valid item",
-			GetName(), HasAuthority()?"SV":"CL", itemName);
+			GetName(), HasAuthority()?"SRV":"CLI", itemName);
 	    return -1;
     }
 
@@ -1456,7 +1472,7 @@ int UInventoryComponent::RemoveItemByQuantity(
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): RemoveItemFromSlot() Finished - "
 		"{NumRequest} Requested. {NumRemoved} Removed, {NumRemain} Remaining",
-		GetName(), HasAuthority()?"SV":"CL", quantity, ItemsRemoved, quantity - ItemsRemoved);
+		GetName(), HasAuthority()?"SRV":"CLI", quantity, ItemsRemoved, quantity - ItemsRemoved);
 	
 	return ItemsRemoved;
 }
@@ -1482,9 +1498,9 @@ bool UInventoryComponent::SwapOrStackSlots(UInventoryComponent* fromInventory, i
     	remainder, showNotify, isEquipmentSlot, fromEquipmentSlot);
 	
 	UE_LOGFMT(LogTemp, Log,
-		"{Inventory}({Sv}): SwapOrStackSlots() {PassOrFail}} - "
+		"{Inventory}({Sv}): SwapOrStackSlots() {PassOrFail} - "
 		"{FromInventory} {FromType} #{FromSlot} -> {ToInventory} {ToType} #{ToSlot}",
-		GetName(), HasAuthority()?"SV":"CL", didSwap ? "Finished" : "Failed",
+		GetName(), HasAuthority()?"SRV":"CLI", didSwap ? "Finished" : "Failed",
 		fromInventory->GetName(), fromEquipmentSlot ? "Equipment Slot" : "Inventory Slot", fromSlotNum,
 		GetName(), isEquipmentSlot ? "Equipment Slot" : "Inventory Slot", toSlotNum);
 	
@@ -1520,7 +1536,7 @@ bool UInventoryComponent::SwapOrStackSlotsWithRemainder(
     	UE_LOGFMT(LogTemp, Warning,
 			"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - "
 			"{FromInventory} {SlotType} #{SlotNum} is not a Valid Slot",
-			GetName(), HasAuthority()?"SV":"CL", fromInventory->GetName(),
+			GetName(), HasAuthority()?"SRV":"CLI", fromInventory->GetName(),
 			fromEquipmentSlot ? "Equipment Slot" : "Inventory Slot", fromSlotNum);
 	    return false;
     }
@@ -1548,7 +1564,7 @@ bool UInventoryComponent::SwapOrStackSlotsWithRemainder(
     {
     	UE_LOGFMT(LogTemp, Log,
 			"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - {SlotType} #{SlotNum} is an Empty Slot",
-			GetName(), HasAuthority()?"SV":"CL", isEquipmentSlot ? "Equipment Slot" : "Inventory Slot", toSlotNum);
+			GetName(), HasAuthority()?"SRV":"CLI", isEquipmentSlot ? "Equipment Slot" : "Inventory Slot", toSlotNum);
         return false;
     }
 
@@ -1561,7 +1577,7 @@ bool UInventoryComponent::SwapOrStackSlotsWithRemainder(
     		UE_LOGFMT(LogTemp, Warning,
 				"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - "
 				"Origination {ToSlotType} #{ToSlotNum} (Type {ToType}) failed to validate.",
-				GetName(), HasAuthority()?"SV":"CL", isEquipmentSlot ? "Equipment Slot" : "Inventory Slot",
+				GetName(), HasAuthority()?"SRV":"CLI", isEquipmentSlot ? "Equipment Slot" : "Inventory Slot",
 				toSlotNum, isEquipmentSlot ? UEnum::GetValueAsString(FromInventorySlot.EquipType) : UEnum::GetValueAsString(ToInventorySlot.SlotType));
     		return false;
     	}
@@ -1577,7 +1593,7 @@ bool UInventoryComponent::SwapOrStackSlotsWithRemainder(
     		UE_LOGFMT(LogTemp, Warning,
 				"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - "
 				"Destination {ToSlotType} #{ToSlotNum} (Type {ToType}) failed to validate.",
-				GetName(), HasAuthority()?"SV":"CL", isEquipmentSlot ? "Equipment Slot" : "Inventory Slot",
+				GetName(), HasAuthority()?"SRV":"CLI", isEquipmentSlot ? "Equipment Slot" : "Inventory Slot",
 				toSlotNum, isEquipmentSlot ? UEnum::GetValueAsString(FromInventorySlot.EquipType) : UEnum::GetValueAsString(ToInventorySlot.SlotType));
     		return false;
     	}
@@ -1602,7 +1618,7 @@ bool UInventoryComponent::SwapOrStackSlotsWithRemainder(
     		UE_LOGFMT(LogTemp, Error,
 				"{Inventory}({Sv}): SwapOrStackWithRemainder() - "
 				"Internal Request to DecreaseQuantityInSlot Failed",
-				GetName(), HasAuthority()?"SV":"CL",
+				GetName(), HasAuthority()?"SRV":"CLI",
 				ToInventorySlot.ItemName, FromInventorySlot.ItemName);
     		return false;
     	}
@@ -1610,7 +1626,7 @@ bool UInventoryComponent::SwapOrStackSlotsWithRemainder(
     	UE_LOGFMT(LogTemp, Error,
 			"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - "
 			"To-Item ({ToItem}) != ({FromItem}), or items have different durability.",
-			GetName(), HasAuthority()?"SV":"CL",
+			GetName(), HasAuthority()?"SRV":"CLI",
 			ToInventorySlot.ItemName, FromInventorySlot.ItemName);
     	return false;
 	}
@@ -1631,7 +1647,7 @@ bool UInventoryComponent::SwapOrStackSlotsWithRemainder(
     		UE_LOGFMT(LogTemp, Warning,
 				"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - "
 				"Equipment Going ({ToType}) does not match From Slot Type ({FromType})",
-				GetName(), HasAuthority()?"SV":"CL",
+				GetName(), HasAuthority()?"SRV":"CLI",
 				UEnum::GetValueAsString(ToInventorySlot.EquipType),
 				UEnum::GetValueAsString(FromInventorySlot.EquipType));
     		return false;
@@ -1643,7 +1659,7 @@ bool UInventoryComponent::SwapOrStackSlotsWithRemainder(
     		UE_LOGFMT(LogTemp, Warning,
 				"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - "
 				"Equipment Going ({ToType}) does not match From Slot Type ({FromType})",
-				GetName(), HasAuthority()?"SV":"CL",
+				GetName(), HasAuthority()?"SRV":"CLI",
 				UEnum::GetValueAsString(ToInventorySlot.EquipType),
 				UEnum::GetValueAsString(FromInventorySlot.EquipType));
     		return false;
@@ -1660,7 +1676,7 @@ bool UInventoryComponent::SwapOrStackSlotsWithRemainder(
     	const bool wasDonned = donEquipment(this, fromSlotNum, eSlot);
     	UE_LOGFMT(LogTemp, Warning,
 			"{Inventory}({Sv}): SwapOrStackWithRemainder(): Internal Request to donEquipment() {PassOrFail} ",
-			GetName(), HasAuthority()?"SV":"CL", wasDonned ? "was Successful" : "FAILED");
+			GetName(), HasAuthority()?"SRV":"CLI", wasDonned ? "was Successful" : "FAILED");
     	return wasDonned;
     }
 
@@ -1678,7 +1694,7 @@ bool UInventoryComponent::SwapOrStackSlotsWithRemainder(
         	UE_LOGFMT(LogTemp, Warning,
 				"{Inventory}({Sv}): SwapOrStackWithRemainder(): "
 				"Internal Request to AddItemFromExistingSlot() FAILED",
-				GetName(), HasAuthority()?"SV":"CL");
+				GetName(), HasAuthority()?"SRV":"CLI");
             return false;
         }
     	
@@ -1686,14 +1702,14 @@ bool UInventoryComponent::SwapOrStackSlotsWithRemainder(
     	UE_LOGFMT(LogTemp, Log,
 			"{Inventory}({Sv}): SwapOrStackWithRemainder() Ran Successfully. "
 			"{NumRequest} Requested. {NumMoved} Moved, {NumRemain} Remaining",
-			GetName(), HasAuthority()?"SV":"CL", quantity,
+			GetName(), HasAuthority()?"SRV":"CLI", quantity,
 			moveQuantity - ItemsAdded, ItemsRemoved - ItemsAdded);
         return true;
     }
     UE_LOGFMT(LogTemp, Warning,
 		"{Inventory}({Sv}): SwapOrStackWithRemainder():  "
 		"External Request to FromInventory->DecreaseQuantityInSlot() FAILED",
-		GetName(), HasAuthority()?"SV":"CL");
+		GetName(), HasAuthority()?"SRV":"CLI");
 	return false;
 }
 
@@ -1712,7 +1728,7 @@ void UInventoryComponent::OnRep_InventorySlotUpdated_Implementation(const TArray
 			{
 				UE_LOGFMT(LogTemp, Log,
 					"{Inventory}({Sv}) REPNOTIFY: Updated Inventory Slot {SlotNum}",
-					GetName(), HasAuthority()?"SV":"CL", i);
+					GetName(), HasAuthority()?"SRV":"CLI", i);
 				OnInventoryUpdated.Broadcast(i, false);
 				wasUpdated = true;
 			}
@@ -1722,7 +1738,7 @@ void UInventoryComponent::OnRep_InventorySlotUpdated_Implementation(const TArray
 		{
 			UE_LOGFMT(LogTemp, Log,
 				"{Inventory}({Sv}) REPNOTIFY: Added Inventory Slot {SlotNum}",
-				GetName(), HasAuthority()?"SV":"CL", i);
+				GetName(), HasAuthority()?"SRV":"CLI", i);
 			OnInventoryUpdated.Broadcast(i, false);
 			wasUpdated = true;
 		}
@@ -1731,7 +1747,7 @@ void UInventoryComponent::OnRep_InventorySlotUpdated_Implementation(const TArray
 	{
 		UE_LOGFMT(LogTemp, Warning,
 			"{Inventory}({Sv}) REPNOTIFY: Unable to ascertain which Inventory Slot was updated.",
-			GetName(), HasAuthority()?"SV":"CL");
+			GetName(), HasAuthority()?"SRV":"CLI");
 	}
 }
 
@@ -1751,7 +1767,7 @@ void UInventoryComponent::OnRep_EquipmentSlotUpdated_Implementation(const TArray
 			{
 				UE_LOGFMT(LogTemp, Log,
 					"{Inventory}({Sv}) REPNOTIFY: Updated Equipment Slot {SlotNum} (Type '{EnumType}')",
-					GetName(), HasAuthority()?"SV":"CL", i, UEnum::GetValueAsString(thisSlot.EquipType));
+					GetName(), HasAuthority()?"SRV":"CLI", i, UEnum::GetValueAsString(thisSlot.EquipType));
 				OnInventoryUpdated.Broadcast(i, true);
 				wasUpdated = true;
 			}
@@ -1761,7 +1777,7 @@ void UInventoryComponent::OnRep_EquipmentSlotUpdated_Implementation(const TArray
 		{
 			UE_LOGFMT(LogTemp, Log,
 				"{Inventory}({Sv}) REPNOTIFY: Added Equipment Slot {SlotNum} (Type '{EnumType}')",
-				GetName(), HasAuthority()?"SV":"CL", i, UEnum::GetValueAsString(thisSlot.EquipType));
+				GetName(), HasAuthority()?"SRV":"CLI", i, UEnum::GetValueAsString(thisSlot.EquipType));
 			OnInventoryUpdated.Broadcast(i, true);
 			wasUpdated = true;
 		}
@@ -1771,7 +1787,7 @@ void UInventoryComponent::OnRep_EquipmentSlotUpdated_Implementation(const TArray
 	{
 		UE_LOGFMT(LogTemp, Warning,
 			"{Inventory}({Sv}) REPNOTIFY: Unable to ascertain which Equipment Slot was updated.",
-			GetName(), HasAuthority()?"SV":"CL");
+			GetName(), HasAuthority()?"SRV":"CLI");
 	}
 	
 }
@@ -1788,7 +1804,7 @@ void UInventoryComponent::OnRep_InUseByActors_Implementation(const TArray<AActor
 		{
 			UE_LOGFMT(LogTemp, Warning,
 				"{Inventory}({Sv}) REPNOTIFY: Inventory is no longer being used by {CharacterName}",
-				GetName(), HasAuthority()?"SV":"CL", OldUseActor->GetName());
+				GetName(), HasAuthority()?"SRV":"CLI", OldUseActor->GetName());
 			OnInventoryInUse.Broadcast(OldUseActor, false);
 		}
 	}
@@ -1819,7 +1835,7 @@ void UInventoryComponent::Server_RestoreSavedInventory_Implementation(
 	{
 		UE_LOGFMT(LogTemp, Log,
 			"{Inventory}({Sv}): Request to restore inventory must run on the authority.",
-			GetName(), HasAuthority()?"SV":"CL");
+			GetName(), HasAuthority()?"SRV":"CLI");
 	}
 }
 
@@ -1864,7 +1880,7 @@ bool UInventoryComponent::SplitStack(
         {
         	UE_LOGFMT(LogTemp, Log,
 				"{Inventory}({Sv}) Failed - The validated move quantity was an invalid quantity.",
-				GetName(), HasAuthority()?"SV":"CL");
+				GetName(), HasAuthority()?"SRV":"CLI");
             return false;
         }
 
@@ -1877,7 +1893,7 @@ bool UInventoryComponent::SplitStack(
     		{
     			UE_LOGFMT(LogTemp, Warning,
 					"{Inventory}({Sv}): SplitStack() Failed - Slots are occupied by different items",
-					GetName(), HasAuthority()?"SV":"CL");
+					GetName(), HasAuthority()?"SRV":"CLI");
     			return false;
     		}
     	}
@@ -1903,7 +1919,7 @@ bool UInventoryComponent::SplitStack(
             	UE_LOGFMT(LogTemp, Log,
 					"{Inventory}({Sv}): Successfully Split a Stack. "
 					"{NumRequest} Requested. {NumMoved} Moved, {NumRemain} Remaining",
-					GetName(), HasAuthority()?"SV":"CL",
+					GetName(), HasAuthority()?"SRV":"CLI",
 					splitQuantity, ItemsAdded, qty - ItemsAdded);
                 return true;
             }
@@ -1912,11 +1928,11 @@ bool UInventoryComponent::SplitStack(
         }
     	UE_LOGFMT(LogTemp, Error,
 			"{Inventory}({Sv}): External Request to DecreaseQuantityInSlot() failed",
-			GetName(), HasAuthority()?"SV":"CL");
+			GetName(), HasAuthority()?"SRV":"CLI");
     }
 	UE_LOGFMT(LogTemp, Warning,
 		"{Inventory}({Sv}) Failed - The origination slot did not contain any items.",
-		GetName(), HasAuthority()?"SV":"CL");
+		GetName(), HasAuthority()?"SRV":"CLI");
     return false;
 }
 
@@ -1935,7 +1951,7 @@ int UInventoryComponent::IncreaseSlotQuantity(int slotNumber, int quantity, bool
 	const int ItemsAdded = IncreaseSlotQuantity(slotNumber, quantity, newQty, showNotify);
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): IncreaseQuantityInSlot() Override added {n} items in Inventory Slot #{SlotNum}",
-		GetName(), HasAuthority()?"SV":"CL", quantity, ItemsAdded, slotNumber);
+		GetName(), HasAuthority()?"SRV":"CLI", quantity, ItemsAdded, slotNumber);
 	return ItemsAdded;
 }
 
@@ -1961,7 +1977,7 @@ int UInventoryComponent::IncreaseSlotQuantity(int slotNumber, int quantity, int&
     {
 	    UE_LOGFMT(LogTemp, Warning,
 			"{Inventory}({Sv}): IncreaseQuantityInSlot Failed - Inventory Slot #{SlotNum} is Empty",
-			GetName(), HasAuthority()?"SV":"CL", slotNumber);
+			GetName(), HasAuthority()?"SRV":"CLI", slotNumber);
     	return -1;
     }
 	
@@ -1990,7 +2006,7 @@ int UInventoryComponent::IncreaseSlotQuantity(int slotNumber, int quantity, int&
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): IncreaseQuantityInSlot - "
 		"{NumRequest} Requested. {NumMoved} Added, {NumRemain} Ignored. New Quantity: {NumNow}",
-		GetName(), HasAuthority()?"SV":"CL", quantity, ItemsAdded, quantity - ItemsAdded, newQuantity);
+		GetName(), HasAuthority()?"SRV":"CLI", quantity, ItemsAdded, quantity - ItemsAdded, newQuantity);
     return ItemsAdded;
 }
 
@@ -2041,12 +2057,12 @@ int UInventoryComponent::DecreaseSlotQuantity(int slotNumber, int quantity, int&
     	UE_LOGFMT(LogTemp, Log,
 			"{Inventory}({Sv}): DecreaseQuantityInSlot() was Successful"
 			"{NumRequest} Requested. {NumRemoved} Removed, {NumRemain} Remaining. New Quantity = {NewNum}",
-			GetName(), HasAuthority()?"SV":"CL", quantity, ItemsRemoved, remainder, newQuantity);
+			GetName(), HasAuthority()?"SRV":"CLI", quantity, ItemsRemoved, remainder, newQuantity);
         return ItemsRemoved;
     }
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): DecreaseQuantityInSlot() Failed - {SlotType} #{SlotNum} is Empty",
-		GetName(), HasAuthority()?"SV":"CL",
+		GetName(), HasAuthority()?"SRV":"CLI",
 		isEquipment ? "Equipment Slot" : "Inventory Slot", slotNumber);
     return -1;
 }
@@ -2067,7 +2083,7 @@ int UInventoryComponent::DecreaseSlotQuantity(int slotNumber, int quantity, bool
 	const int ItemsRemoved = DecreaseSlotQuantity(slotNumber, quantity, remainder, isEquipment, showNotify);
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): DecreaseQuantityInSlot() Override removed {n} items in {SlotType} #{SlotNum}",
-		GetName(), HasAuthority()?"SV":"CL", ItemsRemoved, 
+		GetName(), HasAuthority()?"SRV":"CLI", ItemsRemoved, 
 		isEquipment ? "Equipment Slot" : "Inventory Slot", slotNumber);
 	return ItemsRemoved;
 }
@@ -2085,7 +2101,7 @@ TArray<FStInventoryNotify> UInventoryComponent::GetNotifications()
     	Notifications_.Empty();
     	UE_LOGFMT(LogTemp, Log,
 			"{Inventory}({Sv}): GetNotifications() found {n} pending notifications",
-			GetName(), HasAuthority()?"SV":"CL", invNotify.Num());
+			GetName(), HasAuthority()?"SRV":"CLI", invNotify.Num());
         return invNotify;
     }
     return invNotify;
@@ -2104,7 +2120,7 @@ void UInventoryComponent::SendNotification(FName itemName, int quantity, bool wa
     {
     	UE_LOGFMT(LogTemp, Warning,
 			"{Inventory}({Sv}): SendNotification() received an invalid quantity.",
-			GetName(), HasAuthority()?"SV":"CL");
+			GetName(), HasAuthority()?"SRV":"CLI");
 	    return;
     }
     FStInventoryNotify InventoryNotification(itemName, abs(quantity));
@@ -2112,7 +2128,7 @@ void UInventoryComponent::SendNotification(FName itemName, int quantity, bool wa
     Notifications_.Add(InventoryNotification);
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): New Notification - There are now {n} notifications pending",
-		GetName(), HasAuthority()?"SV":"CL", Notifications_.Num());
+		GetName(), HasAuthority()?"SRV":"CLI", Notifications_.Num());
     OnNotificationAvailable.Broadcast();
 }
 
@@ -2129,7 +2145,7 @@ void UInventoryComponent::ResetSlot(int slotNumber, bool isEquipment)
     	GetSlot(slotNumber, isEquipment).EmptyAndResetSlot();
     	UE_LOGFMT(LogTemp, Log,
 			"{Inventory}({Sv}): {SlotType} #{SlotNum} has been Reset",
-			GetName(), HasAuthority()?"SV":"CL",
+			GetName(), HasAuthority()?"SRV":"CLI",
 			isEquipment ? "Equipment Slot" : "Inventory Slot", slotNumber);
     }
 }
@@ -2188,7 +2204,7 @@ bool UInventoryComponent::TransferItemBetweenSlots(
                 {
                 	UE_LOGFMT(LogTemp, Log,
 						"{Inventory}({Sv}): Successful Transfer of Item (Swapped)",
-						GetName(), HasAuthority()?"SV":"CL");
+						GetName(), HasAuthority()?"SRV":"CLI");
                     return true;
                 }
             }
@@ -2204,7 +2220,7 @@ bool UInventoryComponent::TransferItemBetweenSlots(
                     {
                     	UE_LOGFMT(LogTemp, Log,
 							"{Inventory}({Sv}): Successful Transfer of Item (First Empty Slot)",
-							GetName(), HasAuthority()?"SV":"CL");
+							GetName(), HasAuthority()?"SRV":"CLI");
                         return true;
                     }
                 }
@@ -2219,7 +2235,7 @@ bool UInventoryComponent::TransferItemBetweenSlots(
         	{
         		UE_LOGFMT(LogTemp, Log,
 					"{Inventory}({Sv}): Successfully Received x{Quantity} {ItemName} from '{FromInv}'",
-					GetName(), HasAuthority()?"SV":"CL", moveQuantity, FromInventorySlot.ItemName,
+					GetName(), HasAuthority()?"SRV":"CLI", moveQuantity, FromInventorySlot.ItemName,
 					fromInventory->GetName());
         		return true;
         	}
@@ -2228,7 +2244,7 @@ bool UInventoryComponent::TransferItemBetweenSlots(
 	
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): Transfer Failed - Origination Slot Empty ({SlotType} #{Slot})",
-		GetName(), HasAuthority()?"SV":"CL",
+		GetName(), HasAuthority()?"SRV":"CLI",
 		isFromEquipSlot ? "Equipment Slot" : "Inventory Slot", fromSlotNum);
     return false;
 }
@@ -2291,7 +2307,7 @@ bool UInventoryComponent::ActivateSlot(int SlotOfActivation, bool isEquippedActi
     				{
     					UE_LOGFMT(LogTemp, Warning,
 							"{Inventory}({Sv}): Activate Item - Failed to Activate (No Eligible Slot Found)",
-							GetName(), HasAuthority()?"SV":"CL");
+							GetName(), HasAuthority()?"SRV":"CLI");
     					return false;
     				}
     				
@@ -2299,7 +2315,7 @@ bool UInventoryComponent::ActivateSlot(int SlotOfActivation, bool isEquippedActi
     			
     			UE_LOGFMT(LogTemp, Warning,
 					"{Inventory}({Sv}): Activate Item - {SlotType} #{SlotNum} was Empty",
-					GetName(), HasAuthority()?"SV":"CL",
+					GetName(), HasAuthority()?"SRV":"CLI",
 					isEquippedActivation ? "Equipment Slot" : "Inventory Slot", SlotOfActivation);
     			return false;
     			
@@ -2308,14 +2324,14 @@ bool UInventoryComponent::ActivateSlot(int SlotOfActivation, bool isEquippedActi
     	
     	UE_LOGFMT(LogTemp, Log,
 			"{Inventory}({Sv}): Activate Item - Successful Activation of type '{ActivateType}' on item '{ItemName}'",
-			GetName(), HasAuthority()?"SV":"CL", UEnum::GetValueAsString(ActivationType), ActivatedSlot.ItemName);
+			GetName(), HasAuthority()?"SRV":"CLI", UEnum::GetValueAsString(ActivationType), ActivatedSlot.ItemName);
     	
     	if (forceConsume || ItemInSlot.consumeOnUse)
     	{
     		DecreaseSlotQuantity(SlotOfActivation,1,isEquippedActivation);
     		UE_LOGFMT(LogTemp, Log,
 				"{Inventory}({Sv}): Activate Item - The activation of item '{ItemName}' caused one to be consumed.",
-				GetName(), HasAuthority()?"SV":"CL", UEnum::GetValueAsString(ActivationType), ActivatedSlot.ItemName);
+				GetName(), HasAuthority()?"SRV":"CLI", UEnum::GetValueAsString(ActivationType), ActivatedSlot.ItemName);
     	}
     	
     	OnItemActivated.Broadcast(ActivatedSlot.ItemName, isEquippedActivation);
@@ -2336,7 +2352,7 @@ void UInventoryComponent::Server_RequestItemActivation_Implementation(
 	{
     	UE_LOGFMT(LogTemp, Log,
 			"{Inventory}({Sv}): Server_RequestItemActivation Authority Violation",
-			GetName(), HasAuthority()?"SV":"CL");
+			GetName(), HasAuthority()?"SRV":"CLI");
 	}
 }
 
@@ -2357,13 +2373,13 @@ void UInventoryComponent::LoadDataDelegate(const FString& SaveSlotName, int32 Us
 			OnInventoryRestored.Broadcast(true);
 			UE_LOGFMT(LogTemp, Log,
 				"{Inventory}({Sv}): (Async Response) Created new Inventory Save with name '{SaveName}' @ index '{Index}'",
-				GetName(), HasAuthority()?"SV":"CL", SaveSlotName, UserIndex);
+				GetName(), HasAuthority()?"SRV":"CLI", SaveSlotName, UserIndex);
 			return;
 		}
 		OnInventoryRestored.Broadcast(false);
 		UE_LOGFMT(LogTemp, Error,
 			"{Inventory}({Sv}): (Async Response) Failed to create new inventory save object '{SaveName}' @ index '{Index}'",
-			GetName(), HasAuthority()?"SV":"CL", SaveSlotName, UserIndex);
+			GetName(), HasAuthority()?"SRV":"CLI", SaveSlotName, UserIndex);
 		return;
 	}
 	
@@ -2373,13 +2389,13 @@ void UInventoryComponent::LoadDataDelegate(const FString& SaveSlotName, int32 Us
 		UE_LOGFMT(LogTemp, Log,
 			"{Inventory}({Sv}): (Async Response) Save '{SaveName}' @ index '{Index}'"
 			"exists, but it is not an inventory save object",
-			GetName(), HasAuthority()?"SV":"CL", SaveSlotName, UserIndex);
+			GetName(), HasAuthority()?"SRV":"CLI", SaveSlotName, UserIndex);
 		return;
 	}
 
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): (Async Response) Restoring Inventory Save '{SaveName}' (Index {Index})'",
-		GetName(), HasAuthority()?"SV":"CL", SaveSlotName, UserIndex);
+		GetName(), HasAuthority()?"SRV":"CLI", SaveSlotName, UserIndex);
 	RestoreInventory(InventorySave->InventorySlots_, InventorySave->EquipmentSlots_);
 	OnInventoryRestored.Broadcast(true);
 }
@@ -2400,13 +2416,13 @@ void UInventoryComponent::LoadDataDelegate(const FString& SaveSlotName, int32 Us
 		{
 			UE_LOGFMT(LogTemp, Error,
 				"{Inventory}({Sv}): (Async Response) Failed to create a new inventory save object.",
-				GetName(), HasAuthority()?"SV":"CL", SaveSlotName, UserIndex);
+				GetName(), HasAuthority()?"SRV":"CLI", SaveSlotName, UserIndex);
 			OnInventoryRestored.Broadcast(false);
 			return;
 		}
 		UE_LOGFMT(LogTemp, Log,
 			"{Inventory}({Sv}): (Async Response) Created new Inventory Save with name '{SaveName}' @ index '{Index}'",
-			GetName(), HasAuthority()?"SV":"CL", SaveSlotName, UserIndex);
+			GetName(), HasAuthority()?"SRV":"CLI", SaveSlotName, UserIndex);
 	}
 	
 	Helper_SaveInventory(SaveData);
@@ -2414,7 +2430,7 @@ void UInventoryComponent::LoadDataDelegate(const FString& SaveSlotName, int32 Us
 
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): (Async Response) Successfully saved the inventory with name '{SaveName}' @ index {Index}'",
-		GetName(), HasAuthority()?"SV":"CL", SaveSlotName_, SaveUserIndex_);
+		GetName(), HasAuthority()?"SRV":"CLI", SaveSlotName_, SaveUserIndex_);
 	OnInventoryRestored.Broadcast(true);
 }
 
@@ -2427,7 +2443,7 @@ void UInventoryComponent::OnRep_NewNotification_Implementation()
 {
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): New Notification Received. There are now {NumNotifies} notifications pending.",
-		GetName(), HasAuthority()?"SV":"CL", Notifications_.Num());
+		GetName(), HasAuthority()?"SRV":"CLI", Notifications_.Num());
 	OnNotificationAvailable.Broadcast();
 }
 
@@ -2464,7 +2480,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
     {
     	UE_LOGFMT(LogTemp, Log,
 			"{Inventory}({Sv}): Server_TransferItems() Canceled - Transfer is the exact same slot",
-			GetName(), HasAuthority()?"SV":"CL");
+			GetName(), HasAuthority()?"SRV":"CLI");
 	    return;
     }
 
@@ -2476,7 +2492,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
     {
     	UE_LOGFMT(LogTemp, Warning,
 			"{Inventory}({Sv}): Destination Inventory ({DestInv}) is Withdraw-Only.",
-			GetName(), HasAuthority()?"SV":"CL", toInventory->GetName());
+			GetName(), HasAuthority()?"SRV":"CLI", toInventory->GetName());
     	return;
     }
     
@@ -2488,7 +2504,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
         {
         	UE_LOGFMT(LogTemp, Warning,
 				"{Inventory}({Sv}): An attempt to take item from another player's inventory was prevented ({FromInv} -> {ToInv})",
-				GetName(), HasAuthority()?"SV":"CL", fromInventory->GetName(), toInventory->GetName());
+				GetName(), HasAuthority()?"SRV":"CLI", fromInventory->GetName(), toInventory->GetName());
             return;
         }
     }
@@ -2500,7 +2516,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
         {
         	UE_LOGFMT(LogTemp, Warning,
 				"{Inventory}({Sv}): An attempt to put items into another player's inventory was prevented ({FromInv} -> {ToInv})",
-				GetName(), HasAuthority()?"SV":"CL", fromInventory->GetName(), toInventory->GetName());
+				GetName(), HasAuthority()?"SRV":"CLI", fromInventory->GetName(), toInventory->GetName());
             return;
         }
     }
@@ -2518,7 +2534,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
             {
             	UE_LOGFMT(LogTemp, Warning,
 					"{Inventory}({Sv}): Transfer Rejected - Too Far Away ({Distance})",
-					GetName(), HasAuthority()?"SV":"CL", fromInventory->GetName(),
+					GetName(), HasAuthority()?"SRV":"CLI", fromInventory->GetName(),
 					fromPlayer->GetDistanceTo(toPlayer));
                 return;
             }
@@ -2531,14 +2547,14 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
             {
             	UE_LOGFMT(LogTemp, Log,
 					"{Inventory}({Sv}): Transfer from {FromInv} Inventory Slot #{SlotNum} failed. Invalid Slot.",
-					GetName(), HasAuthority()?"SV":"CL", fromInventory->GetName(), fromSlot);
+					GetName(), HasAuthority()?"SRV":"CLI", fromInventory->GetName(), fromSlot);
                 return;
             }
             if (!toInventory->IsValidSlot(toSlot, true))
             {
             	UE_LOGFMT(LogTemp, Log,
 					"{Inventory}({Sv}): Transfer to {ToInv} Equipment Slot #{SlotNum} failed. Invalid Equipment Slot.",
-					GetName(), HasAuthority()?"SV":"CL", toInventory->GetName(), toSlot);
+					GetName(), HasAuthority()?"SRV":"CLI", toInventory->GetName(), toSlot);
                 return;
             }
         	
@@ -2547,7 +2563,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
             {
             	UE_LOGFMT(LogTemp, Error,
 					"{Inventory}({Sv}): Internal Request to DonEquipment() Failed. Transfer Canceled.",
-					GetName(), HasAuthority()?"SV":"CL", fromInventory->GetName(), fromSlot);
+					GetName(), HasAuthority()?"SRV":"CLI", fromInventory->GetName(), fromSlot);
             }
         }
         
@@ -2558,14 +2574,14 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
         	{
         		UE_LOGFMT(LogTemp, Log,
 					"{Inventory}({Sv}): Transfer from {FromInv} Equipment Slot #{SlotNum} failed. Invalid Equipment Slot.",
-					GetName(), HasAuthority()?"SV":"CL", fromInventory->GetName(), fromSlot);
+					GetName(), HasAuthority()?"SRV":"CLI", fromInventory->GetName(), fromSlot);
         		return;
         	}
         	if (!toInventory->IsValidSlot(toSlot, false))
         	{
         		UE_LOGFMT(LogTemp, Log,
 					"{Inventory}({Sv}): Transfer to {ToInv} Inventory Slot #{SlotNum} failed. Invalid Slot.",
-					GetName(), HasAuthority()?"SV":"CL", toInventory->GetName(), toSlot);
+					GetName(), HasAuthority()?"SRV":"CLI", toInventory->GetName(), toSlot);
         		return;
         	}
             
@@ -2574,7 +2590,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
             {
             	UE_LOGFMT(LogTemp, Error,
 					"{Inventory}({Sv}): Internal Request to DonEquipment() Failed. Transfer Canceled.",
-					GetName(), HasAuthority()?"SV":"CL", fromInventory->GetName(), fromSlot);
+					GetName(), HasAuthority()?"SRV":"CLI", fromInventory->GetName(), fromSlot);
             }
         }
         
@@ -2585,7 +2601,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
             {
             	UE_LOGFMT(LogTemp, Error,
 					"{Inventory}({Sv}): External Request to SwapOrStackSlots() Failed. Transfer Canceled.",
-					GetName(), HasAuthority()?"SV":"CL", toInventory->GetName(), toSlot);
+					GetName(), HasAuthority()?"SRV":"CLI", toInventory->GetName(), toSlot);
             }
         }
     }
@@ -2597,7 +2613,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
         {
         	UE_LOGFMT(LogTemp, Error,
 				"{Inventory}({Sv}): Transfer Rejected. Too Far Away ({Distance})",
-				GetName(), HasAuthority()?"SV":"CL", toInventory->GetName(),
+				GetName(), HasAuthority()?"SRV":"CLI", toInventory->GetName(),
 				fromPlayer->GetDistanceTo(toPlayer));
         	return;
         }
@@ -2613,7 +2629,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
             	UE_LOGFMT(LogTemp, Error,
 					"{Inventory}({Sv}): Transfer Failed. "
 					"No items were able to be removed from {FromInv} {SlotType} #{SlotNum}",
-					GetName(), HasAuthority()?"SV":"CL", fromInventory->GetName(),
+					GetName(), HasAuthority()?"SRV":"CLI", fromInventory->GetName(),
 					isFromEquipSlot ? "Equipment Slot" : "Inventory Slot", fromSlot);
                 return;
             }
@@ -2627,7 +2643,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
         	UE_LOGFMT(LogTemp, Log,
 				"{Inventory}({Sv}): Successfully Transferred x{Quantity} of {ItemName} "
 				"From '{FromInv} {SlotType} #{SlotNum}' to '{ToInv} {ToSlotType} #{ToSlotNum}'",
-				GetName(), HasAuthority()?"SV":"CL",
+				GetName(), HasAuthority()?"SRV":"CLI",
 				fromInventory->GetName(), isFromEquipSlot ? "Equipment Slot" : "Inventory Slot", fromSlot,
 				toInventory->GetName(),   isToEquipSlot   ? "Equipment Slot" : "Inventory Slot", toSlot    );
         }
@@ -2638,7 +2654,7 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
         	UE_LOGFMT(LogTemp, Error,
 				"{Inventory}({Sv}): Transfer Failed. "
 				"No items were able to be added to '{ToInv} {SlotType} #{SlotNum}'. Will attempt to reimburse loss.",
-				GetName(), HasAuthority()?"SV":"CL", toInventory->GetName(),
+				GetName(), HasAuthority()?"SRV":"CLI", toInventory->GetName(),
 				isToEquipSlot ? "Equipment Slot" : "Inventory Slot", toSlot);
             fromInventory->AddItemFromExistingSlot(
             	FromInventorySlot, fromSlot,moveQty,true,false,false);
@@ -2671,7 +2687,7 @@ void UInventoryComponent::Server_DropItemOnGround_Implementation(UInventoryCompo
 	{
 		UE_LOGFMT(LogTemp, Warning,
 			"{Inventory}({Sv}): Attempted to drop {SlotType} #{SlotNum}, but the slot is Empty (or Invalid)",
-			GetName(), HasAuthority()?"SV":"CL", isFromEquipSlot ? "Equipment Slot" : "Inventory Slot", fromSlot);
+			GetName(), HasAuthority()?"SRV":"CLI", isFromEquipSlot ? "Equipment Slot" : "Inventory Slot", fromSlot);
 		return;
 	}
 
@@ -2689,7 +2705,7 @@ void UInventoryComponent::Server_DropItemOnGround_Implementation(UInventoryCompo
             {
             	UE_LOGFMT(LogTemp, Warning,
 					"{Inventory}({Sv}): An attempt to drop item out of another player's inventory was prevented.",
-					GetName(), HasAuthority()?"SV":"CL");
+					GetName(), HasAuthority()?"SRV":"CLI");
                 return;
             }
         }
@@ -2703,7 +2719,7 @@ void UInventoryComponent::Server_DropItemOnGround_Implementation(UInventoryCompo
         {
         	UE_LOGFMT(LogTemp, Error,
 				"{Inventory}({Sv}): Attempt to Drop Failed. Dropping player has no GetMesh().",
-				GetName(), HasAuthority()?"SV":"CL");
+				GetName(), HasAuthority()?"SRV":"CLI");
 	        return;
         }
 
@@ -2733,7 +2749,7 @@ void UInventoryComponent::Server_DropItemOnGround_Implementation(UInventoryCompo
     		UE_LOGFMT(LogTemp, Error,
 				"{Inventory}({Sv}): Item '{ItemName} (x{Quantity}) was dropped "
 				"successfully, but the pickup actor failed to spawn.",
-				GetName(), HasAuthority()?"SV":"CL", InventorySlot.ItemName);
+				GetName(), HasAuthority()?"SRV":"CLI", InventorySlot.ItemName);
     	}
         
     }
@@ -2778,20 +2794,20 @@ void UInventoryComponent::Server_RequestOtherInventory_Implementation(UInventory
     		{
     			UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): RequestOtherInventory() - "
 					"{ThisPlayer} was denied access to the inventory of {TargetPlayer}",
-					GetName(), HasAuthority()?"SV":"CL", OwnerCharacter->GetName(), TargetCharacter->GetName());
+					GetName(), HasAuthority()?"SRV":"CLI", OwnerCharacter->GetName(), TargetCharacter->GetName());
     			return;
     		}
 
     		// Character is controlled by an NPC
     		UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): RequestOtherInventory() - "
 				"{ThisPlayer} was denied access to the inventory of {TargetPlayer} - NPC is still controlled (alive)",
-				GetName(), HasAuthority()?"SV":"CL", OwnerCharacter->GetName(), TargetCharacter->GetName());
+				GetName(), HasAuthority()?"SRV":"CLI", OwnerCharacter->GetName(), TargetCharacter->GetName());
     		return;
     	}
     }
 	
 	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): Request to access '{TargetInventory}' of {TargetName} was successful",
-			  GetName(), HasAuthority()?"SV":"CL", targetInventory->GetName(), TargetCharacter->GetName());
+			  GetName(), HasAuthority()?"SRV":"CLI", targetInventory->GetName(), TargetCharacter->GetName());
     targetInventory->SetInventoryInUse(OwnerCharacter, true);
     
 }
@@ -2819,6 +2835,7 @@ void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty> &
 
     DOREPLIFETIME(UInventoryComponent, InventorySlots_);
     DOREPLIFETIME(UInventoryComponent, EquipmentSlots_);
+    DOREPLIFETIME(UInventoryComponent, InUseByActors_);
 	
     DOREPLIFETIME_CONDITION(UInventoryComponent, Notifications_, COND_OwnerOnly);
 }
