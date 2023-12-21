@@ -28,10 +28,10 @@ public:
 	}
 	FString GetSaveSlotName() const { return InventorySaveSlotName_; }
 
-	TArray<FStInventorySlot> InventorySlots_ = {};
-	TArray<FStInventorySlot> EquipmentSlots_ = {};
+	UPROPERTY(SaveGame) TArray<FStInventorySlot> InventorySlots_ = {};
+	UPROPERTY(SaveGame) TArray<FStInventorySlot> EquipmentSlots_ = {};
 
 private:
-	FString InventorySaveSlotName_ = "";
+	UPROPERTY(SaveGame) FString InventorySaveSlotName_ = "";
 	
 };
