@@ -9,197 +9,244 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "NativeGameplayTags.h"
 #include "Engine/DataTable.h"
+#include "Delegates/Delegate.h"
 
 #include "ItemData.generated.h"
 
 
 DECLARE_LOG_CATEGORY_EXTERN(LogInventory, Log, Error);
 
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Equipment);	// Used as equipment
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_QuestItem);	// Used in a quest
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Drinkable);	// Can be drank
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Edible);		// Can be eaten
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_MeleeWeapon);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_RangedWeapon);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Placeable);	// Can be placed like furniture
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Currency);		// Used as a type of currency
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Fuel);			// Used as fuel for a forge or fire
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Utility);		// An item that provide a function when in possession
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Ingredient);	// Used as an ingredient to a crafting recipe
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Component);	// Used as part of a final product, like a battery
 
-UENUM(BlueprintType)
-enum class EItemActivation : uint8
-{
-	NONE	UMETA(DisplayName = "Does Not Activate"),
-	EQUIP	UMETA(DisplayName = "Equippable",	Description = "Equips when Activated"),
-	EAT		UMETA(DisplayName = "Edible",		Description = "Item is eaten or otherwise consumed"),
-	DRINK	UMETA(DisplayName = "Drinkable",	Description = "Item is consumed by drinking"),
-	PLACE	UMETA(DisplayName = "Placeable",	Description = "Item activated the placement system when activated"),
-	MISC	UMETA(DisplayName = "Activated",	Description = "An item that performs an action when activated")
-};
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Common);		// Base chance of ~65%
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Uncommon);	// Base chance of ~20%
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Rare);		// Base chance of ~11%
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Masterwork); // Base chance of ~6%
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Legendary);	// Base chance of ~1%
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Divine)		// Base chance of ~0.18%
 
-UENUM(BlueprintType)
-enum class EItemCategory : uint8
-{
-	NONE,	CRAFT,	QUEST,	FOOD,	DRINK,	WEAPON,	EQUIPMENT,
-	PLACEABLE,	CURRENCY,	COMPONENT,	FUEL,	UTILITY
-};
-
-UENUM(BlueprintType)
-enum class EItemSubcategory : uint8
-{
-	NONE, RENEWABLE, BATTERY, COOLING
-};
-
-UENUM(BlueprintType)
-enum class EItemRarity : uint8
-{
-	COMMON, UNCOMMON, MASTERWORK, RARE, LEGENDARY, MYTHICAL, RELIC, DEV
-};
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Activation_Trigger); // Default behavior
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Activation_Equip);   // Activating equips it
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Activation_Drink);   // Activating drinks it
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Activation_Eat);     // Activating eats it
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Activation_Emplace); // Starts the placement system
 
 
-USTRUCT(BlueprintType)
-struct T5GINVENTORYSYSTEM_API FStItemData : public FTableRowBase
-{
-	GENERATED_BODY()
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FText displayName = FText::FromName(FName());
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite);
-	FString itemDetails = "Invalid Template Item";
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	EItemRarity itemRareness = EItemRarity::COMMON;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	EItemCategory itemCategory = EItemCategory::NONE;
-
-	// Optional subcategory
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	EItemCategory itemSubcategory = EItemCategory::NONE;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	EItemActivation itemActivation = EItemActivation::NONE;
-
-	// If item can be equipped, this is a list of all eligible slots this item fits in
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TArray<EEquipmentSlotType> equipSlots;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int maxStackSize = 1;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float itemWeight = 0.01f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UTexture2D* itemThumbnail = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UStaticMesh* staticMesh = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	USkeletalMesh* skeletalMesh = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FTransform originAdjust;
-
-	// A durability of <= 0.0 means the item is indestructible
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MaxDurability = -1.0f;
-
-	// True = Delete on Activation.
-	// False = Never Delete on Activation
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool consumeOnUse = false;
-
-	// Value of the item, in base credits
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int basePrice = 1;
-	
-	// If TRUE, this item exists and can be acted on but does not exist for all intents and purposes.
-	// Useful for things like not dropping the item on death
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bIgnoreItem = false;
-
-};
-
-UCLASS()
+// Obsolete?
+UCLASS(BlueprintType)
 class T5GINVENTORYSYSTEM_API UItemSystem : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 public:
-
-	// Gets the current default name for an invalid item.
-	// This should be used instead of accessing the name directly to avoid deprecation issues
-    UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-        static FName getInvalidName() { return FName(); } 
-
-	// Alternative accessor to getInvalidName().
-    UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static FText getInvalidText() { return FText::FromName(FName());}
 	
-	// Checks if the given item data is a stackable item
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static bool isItemStackable(const FStItemData& itemData);
+};
 
-	// Checks if the item name given is stackable. This uses the data table lookup.
-	// To check an existing item data struct with O(1) lookup, use 'isItemStackable'
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static bool GetIsStackable(FName itemName);
 
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static float getItemWeight(const FStItemData& itemData) { return itemData.itemWeight; };
-
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static float getWeight(FName itemName);
-
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static TArray<EEquipmentSlotType> getItemEquipSlots(FStItemData itemData) { return itemData.equipSlots; };
-
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static TArray<EEquipmentSlotType> getEquipmentSlots(FName itemName);
+/**
+ * Defines variables that all items share, as well as accessors/mutators
+ */
+UCLASS(BlueprintType)
+class T5GINVENTORYSYSTEM_API UPrimaryItemDataAsset : public UPrimaryDataAsset
+{
+	GENERATED_BODY()
 	
-	// Checks if the item data is an activated item
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static bool isItemActivated(const FStItemData& itemData);
+public:
 
-	// Checks if the item name given is activated. This uses the data table lookup.
-	// To check an existing item data struct with O(1) lookup, use 'isItemActivated'
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static bool isActivated(FName itemName);
+	UPrimaryItemDataAsset()
+		: ItemRarities(TAG_Item_Rarity_Common),
+		  ItemActivation(TAG_Item_Activation_Trigger)
+		{};
 
-	// Gets the max durability of the given item. Negative means indestructible.
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static float getItemDurability(const FStItemData& itemData);
-
-	// Gets the max durability for the item given. Uses data table lookup.
-	// To check an existing item data struct with O(1) lookup, use 'getItemMaxDurability'
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static float getDurability(FName itemName);
+	UFUNCTION(BlueprintPure) UPrimaryItemDataAsset* CopyAsset() const;
 	
-	// Returns a pointer to the item data table for manual operations
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static UDataTable* getItemDataTable();
-
-	// Gets the item data structure from the given item name ('food_carrot')
-	// Performs an O(1) lookup, but retrieves data, which is slower than direct access.
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static FStItemData getItemDataFromItemName(FName itemName);
-
-	/** Checks if the given name is valid. If valid, retrieves the item data from the data table
-	 *
-	 * @param itemName An FName text that represents the row name we're looking for (row name = item name)
-	 * @param performLookup If true, will also check the item is in the data table.
-	 * @return True if the item is valid, false if it is not.
-	 */
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static bool getItemNameIsValid(FName itemName, bool performLookup = false);
+	UFUNCTION(BlueprintPure) int			GetItemPrice() const;
+	UFUNCTION(BlueprintPure) int			GetItemMaxStackSize() const;
+	UFUNCTION(BlueprintPure) float			GetItemCarryWeight() const;
+	UFUNCTION(BlueprintPure) float			GetItemMaxDurability() const;
+	UFUNCTION(BlueprintPure) FText			GetItemDisplayName() const;
+	UFUNCTION(BlueprintPure) FString		GetItemDisplayNameAsString() const;
+	UFUNCTION(BlueprintPure) FString		GetItemDescription() const;
+	UFUNCTION(BlueprintPure) FGameplayTag	GetItemRarity() const;
+	UFUNCTION(BlueprintPure) UTexture2D		GetItemThumbnail() const;
+	UFUNCTION(BlueprintPure) UStaticMesh*	GetItemStaticMesh() const;
+	UFUNCTION(BlueprintPure) FTransform		GetItemOriginAdjustments() const;
 	
-	// Takes an existing itemData and returns its stack size.
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static int getItemMaxStackSize(const FStItemData& itemData) { return itemData.maxStackSize; };
+	UFUNCTION(BlueprintPure) bool	GetIsItemFragile() const;
+	UFUNCTION(BlueprintPure) bool	GetIsItemDroppable() const;
+	UFUNCTION(BlueprintPure) bool	GetIsItemConsumedOnUse() const;
+	UFUNCTION(BlueprintPure) bool	GetCanEquipInSlot(const FGameplayTag& EquipmentSlotTag) const;
+	UFUNCTION(BlueprintPure) bool	GetItemHasCategory(const FGameplayTag& ChallengeTag) const;
+	UFUNCTION(BlueprintPure) bool	GetCanItemActivate() const;
 	
-	/** Gets the maximum value of identical items that can stack together.
-	 * @param itemName An FName with the text of the item (row name) to look for
-	 * @return An integer of the maximum stack size. Return guarantees a value > zero.
-	 */
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static int getMaximumStackSize(FName itemName);
+	UFUNCTION(BlueprintPure) FGameplayTagContainer GetItemCategories() const;
+	UFUNCTION(BlueprintPure) FGameplayTagContainer GetItemEquippableSlots() const;
 
-	/** Checks if two item names are the same
-	 * @return A boolean where TRUE means the two items are the same, and FALSE means different or invalid item
-	 */
-	UFUNCTION(BlueprintPure, Category = "Item Data System Globals")
-		static bool isSameItemName(FName itemOne, FName itemTwo);
+protected:
+	
+	// Name displayed for this item
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FText DisplayName = FText();
 
+	// UI Description of this item
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FString ItemDescription = "";
+	
+	// Rarities that this item can appear as. Defaults to Common only.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FGameplayTagContainer ItemRarities;
+
+	// Categories the item belongs to
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FGameplayTagContainer ItemCategories;
+
+	// How the item activates
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FGameplayTag ItemActivation;
+
+	// If item can be equipped, this is a list of all eligible slots this item fits in
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FGameplayTagContainer EquippableSlots;
+
+	// <= 1 means it does not stack
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	int MaxStackSize = 1;
+
+	// How much each individual item weighs
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	float CarryWeight = 0.01f;
+
+	// The visual used for UI presentation
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	UTexture2D* ItemThumbnail = nullptr;
+
+	// The appearance of the item when spawned
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	UStaticMesh* Mesh = nullptr;
+
+	// XYZ location adjustment from attach point
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FVector OriginAdjustment;
+
+	// XYZ rotation adjustment from attach point
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FRotator OriginRotate;
+
+	// XYZ scale factor from the parent mesh
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FVector OriginScale;
+
+	// Any durability of < 0.0 means the item is indestructible (0.0 means broken)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	float MaxDurability = -1.0f;
+
+	// Base value of the item without modification or scaling
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	int ItemPrice = 1;
+	
+	// Fragile items will be destroyed if dropped out of the inventory
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bFragile = false;
+	
+	// If true, the item can not be willfully dropped by the player.
+	// It must exist in an inventory, or destroyed.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bNoDrop = false;
+
+	// If the item should subtract 1 quantity when consumed/activated
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bConsumeOnUse = false;
+	
+};
+
+
+/**
+ * Data belonging to a specific item, such as a carrot or a sword.
+ */
+UCLASS(BlueprintType)
+class T5GINVENTORYSYSTEM_API UItemDataAsset : public UPrimaryItemDataAsset
+{
+	GENERATED_BODY()
+	
+public:
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite) int Quantity = 1; 
+};
+
+
+/**
+ * Data belonging specifically to items used as starting items. Starting Items
+ * are items that are spawned on NPCs as loot, vendor items for merchants,
+ * or starting items for players.
+ */
+UCLASS(BlueprintType)
+class T5GINVENTORYSYSTEM_API UStartingItemData : public UPrimaryItemDataAsset
+{
+	GENERATED_BODY()
+
+public:
+
+	// The minimum chance, in percentage (0.0 - 1.0) this item will be chosen
+	// 1.0 will result in always being chosen
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) float	ChanceMinimum = 1.f;
+
+	// The maximum chance, in percentage (0.0 - 1.0) this item will be chosen
+	// Ignored if ChanceMinimum is >= 1.0
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) float	ChanceMaximum = 1.f;
+	
+
+	// If true, a random quantity of the item will be given. If false, the
+	// QuantityMaximum will be used.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	bool    bRandomQuantity = false;
+
+	// If true, the item will spawn in the equipment slots, if available
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	bool    bEquipOnStart = false;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	int		QuantityMinimum = 1;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	int		QuantityMaximum = 1;
+	
+};
+
+
+/** Used for tracking items in an inventory slot */
+USTRUCT(BlueprintType)
+struct T5GINVENTORYSYSTEM_API FStItemData
+{
+	GENERATED_BODY()
+
+	TMulticastDelegate<void()>	OnItemUpdated;
+	TMulticastDelegate<void()>	OnItemActivation;
+	
+	TMulticastDelegate<void(const float, const float)>	OnItemDurabilityChanged;
+	
+	// Initializes a generic item
+	FStItemData();
+	FStItemData(const UPrimaryItemDataAsset* NewData);
+	FStItemData(const FStItemData& OldItem);
+
+	~FStItemData();
+
+	float GetModifiedItemValue() const;
+	float GetBaseItemValue() const;
+	float DamageItem(const float DeductionValue);
+	float RepairItem(const float AdditionValue);
+
+	void DestroyItem();
+	void ReplaceItem(const FStItemData& NewItem);
+	
+	bool ActivateItem() const;
+	bool GetIsValidItem() const { return IsValid(Data); }
+	bool GetIsSameItem(const FStItemData& ItemStruct) const;
+	bool GetIsExactSameItem(const FStItemData& ItemStruct) const;
+	bool GetIsItemDamaged() const;
+	bool GetIsItemDroppable() const;
+	bool GetIsItemFragile() const;
+
+	bool GetIsItemUnbreakable() const;
+	bool GetIsItemBroken() const { return DurabilityNow == 0.f; }
+
+	// Current Durability (Data-Durability is the max durability of this item)
+	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) float DurabilityNow;
+
+	// Actual Item Rarity (Data->Rarity is for generating this item)
+	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) FGameplayTag Rarity;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPrimaryItemDataAsset* Data; // References the data asset with static info
+	
 };

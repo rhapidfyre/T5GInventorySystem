@@ -17,21 +17,16 @@ class T5GINVENTORYSYSTEM_API UInventorySave : public USaveGame
 public:
 	
 	UInventorySave() {};
-	UInventorySave(FString NewSaveName) { InventorySaveSlotName_ = NewSaveName; }
 
-	void SetSaveName(const FString& SaveSlotName)
-	{
-		if (InventorySaveSlotName_.IsEmpty())
-		{
-			InventorySaveSlotName_ = SaveSlotName;
-		}
-	}
-	FString GetSaveSlotName() const { return InventorySaveSlotName_; }
+	UFUNCTION(BlueprintPure)
+	TArray<FStInventorySlot> LoadInventorySlots();
 
-	UPROPERTY(SaveGame) TArray<FStInventorySlot> InventorySlots_ = {};
-	UPROPERTY(SaveGame) TArray<FStInventorySlot> EquipmentSlots_ = {};
+	UFUNCTION(BlueprintCallable)
+	void SaveInventorySlots(const TArray<FStInventorySlot>& ArrayOfCopiedSlots);
+
 
 private:
-	UPROPERTY(SaveGame) FString InventorySaveSlotName_ = "";
+
+	UPROPERTY(SaveGame) TArray<FStInventorySlot> InventorySlots_ = {};
 	
 };

@@ -18,131 +18,97 @@ void UInventoryComponent::Helper_SaveInventory(USaveGame*& SaveData) const
 	UInventorySave* InventorySave = Cast<UInventorySave>( SaveData );
 	if (IsValid(SaveData))
 	{
-		InventorySave->SetSaveName(SaveSlotName_);
-		InventorySave->InventorySlots_ = InventorySlots_;
-		InventorySave->EquipmentSlots_ = EquipmentSlots_;
+		InventorySave->SaveInventorySlots(InventorySlots_);
 	}
 }
 
 void UInventoryComponent::BeginPlay()
 {
-    if (bShowDebug)
-    {
-        UE_LOGFMT(LogTemp, Display, "{InventoryName}({Sv}): BeginPlay()",
-            GetName(), HasAuthority()?"SRV":"CLI");
-    }
     Super::BeginPlay();
-    
-    const AActor* ownerActor = GetOwner();
-    if (!IsValid(ownerActor))
-    {
-        UE_LOGFMT(LogTemp, Error, "{InventoryName} has no owner. Removed.", GetName());
-        this->DestroyComponent(); // Kills itself, it failed validation
-    }
 	
-	UE_LOGFMT(LogTemp, Display, "InventoryComponent({Sv}): Began Play with {iNum} Inventory Slots and {eNum} Equipment Slots",
-		HasAuthority()?"SRV":"CLI", GetNumberOfSlots(), GetNumberOfSlots(true));
+	UE_LOGFMT(LogTemp, Display, "InventoryComponent({Sv}): Began Play with {iNum} Inventory Slots",
+		HasAuthority()?"SRV":"CLI", GetNumberOfTotalSlots());
 
-    if (!IsValid(UItemSystem::getItemDataTable()))
-    {
-        UE_LOGFMT(LogEngine, Error, "{InventoryName}({Sv}): Item Data Table Not Found!",
-            GetName(), HasAuthority()?"SRV":"CLI");
-    }
-    else
-    {
-        UE_LOGFMT(LogEngine, Display, "{InventoryName}({Sv}): Data Table Was Found",
-            GetName(), HasAuthority()?"SRV":"CLI");
-    }
+	ReinitializeInventory();
+	bInventoryReady = true;
 }
 
 UInventoryComponent::UInventoryComponent()
 {
+	
+#ifdef UE_BUILD_DEBUG
+	bShowDebug = true;
+#endif
+	
     PrimaryComponentTick.bCanEverTick = false;
     SetIsReplicatedByDefault(true);
-
-	// TODO - Switch over to gameplay tags
-	EligibleEquipmentSlots = {
-		EEquipmentSlotType::PRIMARY,		EEquipmentSlotType::SECONDARY,
-		EEquipmentSlotType::HELMET,			EEquipmentSlotType::NECK,
-		EEquipmentSlotType::EARRINGLEFT,	EEquipmentSlotType::EARRINGRIGHT,
-		EEquipmentSlotType::FACE, 			EEquipmentSlotType::SHOULDERS,
-		EEquipmentSlotType::BACK, 			EEquipmentSlotType::SLEEVES,
-		EEquipmentSlotType::WRISTLEFT,		EEquipmentSlotType::WRISTRIGHT,
-		EEquipmentSlotType::HANDS,			EEquipmentSlotType::RINGLEFT,
-		EEquipmentSlotType::RINGRIGHT,		EEquipmentSlotType::TORSO,
-		EEquipmentSlotType::WAIST,			EEquipmentSlotType::LEGS,
-		EEquipmentSlotType::FEET,			EEquipmentSlotType::COSMETIC
-	};
 }
 
 
 bool UInventoryComponent::HasAuthority() const
 {
+	// In any case where the client isn't playing by themselves,
+	//   the inventory component's owner only has authority on the server.
 	if (IsValid(GetOwner()))
-	{
-		return GetOwner()->HasAuthority();
-	}
-	return GetNetMode() < NM_Client;
+		{return GetOwner()->HasAuthority();}
+	return false;
 }
 
-/*
- * Runs the initialization after UE has created the UObject system.
- * Sets up the stuff for the inventory that can't be done before the game is running.
+/**
+ * Called after BeginPlay() executes, for objects that cannot exist beforehand.
+ * Attempts to load the saved inventory. If the saved inventory does not exist
+ * then it will use the given UInventoryDataAsset. If the Data Asset is not
+ * specified, the class defaults are used and this method will cease execution.
  */
 void UInventoryComponent::ReinitializeInventory()
 {
-	if (!GetIsInventoryReady())
+	// Nothing can happen until the inventory has initialized
+	if (GetIsInventorySystemReady())
 	{
-		// Cancel if the character is invalid
+		// The inventory component is only valid on Characters
 		ACharacter* OwnerCharacter = Cast<ACharacter>( GetOwner() );
 		if (!IsValid(OwnerCharacter))
 		{
+			UE_LOGFMT(LogInventory, Error, "{Name}({Authority}): "
+				"UInventoryComponent is only valid when owned by ACharacter",
+				GetName(), HasAuthority()?"SRV":"CLI");
 			return;
 		}
-
-		// Ensure the number of inventory slots is valid.
-		NumberOfInvSlots = (NumberOfInvSlots > 0) ? NumberOfInvSlots : 6;
-
-		// Reset the Inventory & Equipment Arrays
-		InventorySlots_.Empty();
-		EquipmentSlots_.Empty();
-		Notifications_.Empty(); // and any pending notifications
+		
+		InventorySlots_.Empty(); // Reset the Inventory Slots
+		Notifications_.Empty();  // Clear any pending notifications
     	
 		// Set up Inventory Slots
-		for (int i = 0; i < NumberOfInvSlots; i++)
+		if (IsValid(InventoryDataAsset))
 		{
-			// Initialize with inventory slot type makes it a non-equipment slot
-			FStInventorySlot newSlot(EInventorySlotType::GENERAL);
-			newSlot.SlotNumber = i;
-			InventorySlots_.Add(newSlot);
-			OnInventoryUpdated.Broadcast(i, false);
-		}
-	
-		// Set up Equipment Slots
-		for (int i = 0; i < EligibleEquipmentSlots.Num(); i++)
-		{
-			if (EligibleEquipmentSlots.IsValidIndex(i))
+			const FGameplayTag DefaultInventoryTag = TAG_Inventory_Slot_Generic.GetTag();
+			const FGameplayTag DefaultEquipmentTag = TAG_Inventory_Slot_Equipment.GetTag();
+
+			int SlotNumber = 0;
+			for (; SlotNumber < InventoryDataAsset->NumberOfInventorySlots; SlotNumber++)
 			{
-				if (EligibleEquipmentSlots[i] != EEquipmentSlotType::NONE)
-				{
-					// Ignore slots already added - There can be only one..
-					const int slotNumber = GetSlotNumberFromEquipmentType(EligibleEquipmentSlots[i]);
-					if (slotNumber < 0)
-					{
-						// Initialize with Equip Slot type makes it an equipment slot
-						FStInventorySlot newSlot(EligibleEquipmentSlots[i]);
-						newSlot.SlotNumber = i;
-						EquipmentSlots_.Add(newSlot);
-						OnInventoryUpdated.Broadcast(slotNumber, true);
-					}
-				}
+				FStInventorySlot NewInventorySlot;
+				NewInventorySlot.SlotTag = DefaultInventoryTag;
+				NewInventorySlot.SlotNumber = SlotNumber;
+				InventorySlots_.Add(NewInventorySlot);
+			}
+
+			// Adds the equipment slots to the end of the inventory
+			for (const FGameplayTag& NewEquipmentTag : InventoryDataAsset->EquipmentSlots)
+			{
+				FStInventorySlot NewInventorySlot;
+				NewInventorySlot.SlotTag = DefaultEquipmentTag;
+				NewInventorySlot.EquipmentTag = NewEquipmentTag;
+				NewInventorySlot.SlotNumber = SlotNumber;
+				InventorySlots_.Add(NewInventorySlot);
+				SlotNumber++;
 			}
 		}
-    	
-		UE_LOGFMT(LogTemp, Display, "{OwnerName}({Authority}): Reinitialized. Found {nItems} Starting Items",
-			OwnerCharacter->GetName(), HasAuthority()?"SRV":"CLI", StartingItems.Num());
-
-		bIsInventoryReady = true;
+		UE_LOGFMT(LogTemp, Display, "{Name}({Authority}): (Re)Initialized. "
+			"Inventory has {NumSlots} Slots, of which {NumEquip} are equipment slots.",
+			OwnerCharacter->GetName(), HasAuthority()?"SRV":"CLI",
+			GetNumberOfTotalSlots(), GetNumberOfEquipmentSlots());
+		bInventoryReady = true;
 	}
 }
 
@@ -155,21 +121,23 @@ void UInventoryComponent::IssueStartingItems()
 	}
 
 	// Add starting items to the inventory
-	for (int i = 0; i < StartingItems.Num(); i++)
+	if (IsValid(InventoryDataAsset))
 	{
-		if (StartingItems.IsValidIndex(i))
+		TArray<UStartingItemData*> StartingItems = InventoryDataAsset->GetStartingItems();
+		for (const UStartingItemData* StartingItem : StartingItems)
 		{
-			// Determine the starting item by item name given
-			const FName itemName = StartingItems[i].startingItem;
-			const FStItemData ItemData = UItemSystem::getItemDataFromItemName(itemName);
+			// Create the item by building a struct
+			FStItemData ItemData(StartingItem);
+			
+			// Assume we're putting this item in the first eligible slot
 			int slotNum = -1;
 
-			if (StartingItems[i].bStartEquipped && IsValidSlot(i, true))
+			if (StartingItem->bEquipOnStart)
 			{
 				// Check each eligible equip slot for an open slot
-				for (const EEquipmentSlotType EquipSlot : ItemData.equipSlots)
+				for (const FGameplayTag EquipSlot : ItemData.Data->GetItemEquippableSlots())
 				{
-					if (IsSlotEmptyByEnum(EquipSlot))
+					if (IsSlotEmpty(EquipSlot))
 					{
 						slotNum = GetSlotNumberFromEquipmentType(EquipSlot);
 					}
@@ -192,7 +160,7 @@ void UInventoryComponent::IssueStartingItems()
 
 					// If the item gets equipped, continue the for loop at the next iteration
 					continue;
-                	
+            	
 				}
 			}
         	
@@ -212,8 +180,9 @@ void UInventoryComponent::IssueStartingItems()
 					"{InvName}({Server})}: x{Amount} of '{ItemName}' Added to Slot #{SlotNum}",
 					GetName(), HasAuthority()?"SRV":"CLI", itemsAdded, itemName, slotNum);
 			}
-		}
-	}
+			
+		}//For each starting item
+	}//DataAsset Is Valid
 }
 
 /**
@@ -277,8 +246,7 @@ void UInventoryComponent::SetInventoryInUse(AActor* UseActor, bool isInUse)
  * @param RestoredEquipment One for one copy of the equipment slots to restore
  */
 void UInventoryComponent::RestoreInventory(
-	const TArray<FStInventorySlot>& RestoredInventory,
-	const TArray<FStInventorySlot>& RestoredEquipment)
+	const TArray<FStInventorySlot>& RestoredInventory)
 {
 	const bool doServerSave =	HasAuthority() &&   bSavesOnServer;
 	const bool doClientSave = ! HasAuthority() && ! bSavesOnServer;
@@ -291,7 +259,7 @@ void UInventoryComponent::RestoreInventory(
 		}
 	}
 	
-	bIsInventoryReady = false;
+	bInventoryReady = false;
 	
 	InventorySlots_.Empty();
 	EquipmentSlots_.Empty();
@@ -309,7 +277,7 @@ void UInventoryComponent::RestoreInventory(
 		EquipmentSlots_.Add(NewSlot);
 	}
 	
-	bIsInventoryReady	= true;
+	bInventoryReady	= true;
 	if (HasAuthority())
 	{
 		bInventoryRestored = true;
@@ -401,9 +369,9 @@ FString UInventoryComponent::SaveInventory(FString& responseStr, bool isAsync)
 	UInventorySave* InventorySave = Cast<UInventorySave>(SaveData);
 	if (IsValid(InventorySave))
 	{
+		
 		if (UGameplayStatics::SaveGameToSlot(InventorySave, SaveSlotName_, 0))
 		{
-			InventorySave->SetSaveName(SaveSlotName_);
 			Helper_SaveInventory(SaveData);
 			responseStr = "Successful Synchronous Save";
 			UE_LOGFMT(LogInventory, Log, "{InventoryName}({Sv}): "
@@ -414,6 +382,11 @@ FString UInventoryComponent::SaveInventory(FString& responseStr, bool isAsync)
 	}
 	responseStr = "SaveNameSlot was VALID but UInventorySave was NULL";
 	return FString();
+}
+
+FString UInventoryComponent::GetInventorySaveName() const
+{
+	return DoesInventorySaveExist() ? SaveSlotName_ : "";
 }
 
 
@@ -442,7 +415,7 @@ bool UInventoryComponent::LoadInventory(
 		}
 	}
 	
-	if (bIsInventoryReady)
+	if (bInventoryReady)
 	{
 		if (!UGameplayStatics::DoesSaveGameExist(SaveSlotName, 0))
 		{
@@ -691,14 +664,14 @@ TArray<FStInventorySlot> UInventoryComponent::GetCopyOfAllSlots(bool getEquipmen
 
 /**
  * Gets the index (slot) of the equipment slot where equipment type was found.
- * @param equipEnum Enum of the slotType to find.
+ * @param EquipTag The Equipment Tag to look for
  * @return Int representing the slot number found. Negative indicates failure.
  */
-int UInventoryComponent::GetSlotNumberFromEquipmentType(EEquipmentSlotType equipEnum) const
+int UInventoryComponent::GetSlotNumberFromTag(const FGameplayTag& EquipTag) const
 {
 	
     // Makes sure incoming param is a valid equip slot
-    if (equipEnum != EEquipmentSlotType::NONE)
+    if (EquipTag.GetGameplayTagParents().HasTag(TAG_Inventory_Slot_Equipment.GetTag()))
     {
         // Loop through until we find the equip slot since we only have 1 of each
         for (int i = 0; i < GetNumberOfSlots(true); i++)
@@ -798,7 +771,7 @@ bool UInventoryComponent::IsSlotEmpty(int slotNumber, bool isEquipment) const
  */
 bool UInventoryComponent::IsSlotEmptyByEnum(EEquipmentSlotType equipSlot) const
 {
-    const int slotNum = GetSlotNumberFromEquipmentType(equipSlot);
+    const int slotNum = GetSlotNumberFromTag(equipSlot);
 	if (!IsValidSlot(slotNum, true))
 	{
 		return false;
@@ -1170,7 +1143,7 @@ bool UInventoryComponent::donEquipment(UInventoryComponent* fromInventory, int f
     	
         for (int i = 0; i < eligibleSlots.Num(); i++)
         {
-        	const int EquipSlotNumber = GetSlotNumberFromEquipmentType(eligibleSlots[i]);
+        	const int EquipSlotNumber = GetSlotNumberFromTag(eligibleSlots[i]);
             const FStInventorySlot foundSlot =
             		GetSlot(EquipSlotNumber, true);
             		
@@ -1187,7 +1160,7 @@ bool UInventoryComponent::donEquipment(UInventoryComponent* fromInventory, int f
     if (equipSlot != EEquipmentSlotType::NONE)
     {
         // If the slot is invalid, or the slot types don't match, fail.
-        const int slotNumber = GetSlotNumberFromEquipmentType(eSlot);
+        const int slotNumber = GetSlotNumberFromTag(eSlot);
         if (!IsValidSlot(slotNumber, true))
         {
         	UE_LOGFMT(LogTemp, Display,
@@ -1273,7 +1246,7 @@ bool UInventoryComponent::doffEquipment(EEquipmentSlotType equipSlot, int slotNu
     }
 
     // Remove the equipment
-	const int fromSlot = GetSlotNumberFromEquipmentType(equipSlot);
+	const int fromSlot = GetSlotNumberFromTag(equipSlot);
 	
 	const FStInventorySlot FromInventorySlotCopy = GetCopyOfSlot(fromSlot, true);
 	
@@ -1824,8 +1797,7 @@ void UInventoryComponent::OnRep_InUseByActors_Implementation(const TArray<AActor
 
 
 void UInventoryComponent::Server_RestoreSavedInventory_Implementation(
-	const TArray<FStInventorySlot>& RestoredInventory,
-	const TArray<FStInventorySlot>& RestoredEquipment)
+	const TArray<FStInventorySlot>& RestoredInventory)
 {
 	if (HasAuthority())
 	{
@@ -2284,7 +2256,7 @@ bool UInventoryComponent::ActivateSlot(int SlotOfActivation, bool isEquippedActi
     				int destinationSlot = -1;
     				for ( const EEquipmentSlotType slotType : ItemInSlot.equipSlots )
     				{
-    					const int eSlotNum = GetSlotNumberFromEquipmentType(slotType);
+    					const int eSlotNum = GetSlotNumberFromTag(slotType);
     					if (IsValidSlot(eSlotNum))
     					{
     						FStInventorySlot ToSlot = GetSlot(eSlotNum, true);
@@ -2342,7 +2314,7 @@ bool UInventoryComponent::ActivateSlot(int SlotOfActivation, bool isEquippedActi
 }
 
 void UInventoryComponent::Server_RequestItemActivation_Implementation(
-    UInventoryComponent* inventoryUsed, int slotNumber, bool isEquipment)
+    UInventoryComponent* OriginInventory, int SlotNumber)
 {
     if (HasAuthority())
     {
@@ -2396,7 +2368,7 @@ void UInventoryComponent::LoadDataDelegate(const FString& SaveSlotName, int32 Us
 	UE_LOGFMT(LogTemp, Log,
 		"{Inventory}({Sv}): (Async Response) Restoring Inventory Save '{SaveName}' (Index {Index})'",
 		GetName(), HasAuthority()?"SRV":"CLI", SaveSlotName, UserIndex);
-	RestoreInventory(InventorySave->InventorySlots_, InventorySave->EquipmentSlots_);
+	RestoreInventory(InventorySave->InventorySlots_);
 	OnInventoryRestored.Broadcast(true);
 }
 
@@ -2458,8 +2430,9 @@ void UInventoryComponent::OnRep_NewNotification_Implementation()
  * @param isFromEquipSlot If TRUE, the origination slot will be treated as an equipment slot. False means inventory.
  * @param isToEquipSlot If TRUE, the receiving slot will be treated as an equipment slot. If false, inventory.
  */
-void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponent* fromInventory,
-    UInventoryComponent* toInventory, int fromSlot, int toSlot, int moveQty, bool isFromEquipSlot, bool isToEquipSlot)
+void UInventoryComponent::Server_TransferItems_Implementation(
+	UInventoryComponent* OriginInventory, UInventoryComponent* TargetInventory,
+	int OriginSlotNumber, int TargetSlotNumber, int OrderQuantity)
 {
     UE_LOGFMT(LogTemp, Display, "InventoryComponent: Server_TransferItems_Implementation");
 	
@@ -2670,8 +2643,8 @@ void UInventoryComponent::Server_TransferItems_Implementation(UInventoryComponen
  * @param quantity The amount to toss out. Negative means everything.
  * @param isFromEquipSlot If TRUE, the origination slot will be treated as an equipment slot. False means inventory.
  */
-void UInventoryComponent::Server_DropItemOnGround_Implementation(UInventoryComponent* fromInventory, int fromSlot,
-    int quantity, bool isFromEquipSlot)
+void UInventoryComponent::Server_DropItemOnGround_Implementation(
+	UInventoryComponent* OriginInventory, int SlotNumber, int OrderQuantity)
 {
     if (!IsValid(fromInventory))
     {

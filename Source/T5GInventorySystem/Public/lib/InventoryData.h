@@ -1,31 +1,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
 
 #include "InventoryData.generated.h"
 
-USTRUCT(BlueprintType)
-struct T5GINVENTORYSYSTEM_API FStStartingItem : public FTableRowBase
-{
-	GENERATED_BODY()
-
-	FStStartingItem() {};
-	FStStartingItem(FName NewName, int NewQuantity, bool startEquipped = false);
-	
-	// The quantity of the item in this slot. Zero means empty.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int quantity = 0;
-
-	// Item Name is required. Everything else is an optional OVERRIDE.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FName startingItem = FName();
-	
-	// If true, the item will be equipped
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bStartEquipped = false;
-	
-};
-
+struct FStStartingItem;
 /**
  * WARNING - If you CHANGE, ADD or REMOVE any of these enums,
  * you will need to go to       Content/AZ_Assets/DataTables
@@ -70,4 +50,35 @@ struct T5GINVENTORYSYSTEM_API FStInventoryNotify
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	bool wasAdded = true;
+};
+
+
+UCLASS(BlueprintType)
+class T5GINVENTORYSYSTEM_API UInventoryDataAsset : public UDataAsset
+{
+	GENERATED_BODY()
+public:
+
+	UFUNCTION(BlueprintCallable)
+	TArray<class UStartingItemData*> GetStartingItems() const;
+
+	// The total number of inventory slots, not accounting for backpacks or equipment slots
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) int NumberOfInventorySlots = 24;
+
+	// Inventory slots that will be used with this inventory
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTagContainer EquipmentSlots = {};
+
+	// Optional save folder path WITHOUT the following forward slash or back slash
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FString SavePath = "";
+	
+	// If true, the owner of this inventory can pick up items on the ground by walking over it.
+	// If false, the owner must interact with the actor to pick them up.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bPicksUpItems = false;
+
+	// If true, the owner of this inventory will receive notifications on addition/removal of items
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bShowNotifications = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TArray<class UStartingItemData*> StartingItems;
+	
 };
