@@ -37,6 +37,7 @@ public class T5GInventorySystem : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
+				"GameplayTags",
 				"EnhancedInput"
 			}
 			);

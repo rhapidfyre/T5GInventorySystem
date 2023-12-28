@@ -3,8 +3,17 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
+#include "NativeGameplayTags.h"
+#include "GameplayTags/Public/GameplayTags.h"
+#include "ItemData.h"
 
 #include "FuelData.generated.h"
+
+
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Fuel_Wood);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Fuel_Oil);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Fuel_Flammable);
+
 
 UENUM(BlueprintType)
 enum class EFuelType : uint8
@@ -15,14 +24,51 @@ enum class EFuelType : uint8
 	OIL		UMETA(DisplayName = "Oil-based Fuel")
 };
 
+USTRUCT()
+struct T5GINVENTORYSYSTEM_API FFuelByProduct : public FStItemData
+{
+	GENERATED_BODY()
+	
+	FFuelByProduct() {};
+	FFuelByProduct(FGameplayTag NewFuelTag) : FuelTag(NewFuelTag) {};
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) int MinimumQuantity = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) int MaximumQuantity = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTag FuelTag = TAG_Item_Fuel_Wood.GetTag();
+};
+
+
+/**
+ * Items that are used as fuel
+ */
+UCLASS(BlueprintType)
+class T5GINVENTORYSYSTEM_API UFuelItemAsset : public UItemDataAsset
+{
+	GENERATED_BODY()
+	
+public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TMap<UItemDataAsset*, int> ByProducts = {};
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int BurnTimeInSeconds = 60;
+	
+};
+
+
 USTRUCT(BlueprintType)
-struct T5GINVENTORYSYSTEM_API FStFuelData : public FTableRowBase
+struct T5GINVENTORYSYSTEM_API FStFuelData : public FStItemData
 {
 	GENERATED_BODY()
 
+	FStFuelData() : ItemAsset(nullptr) {};
+
+	FStFuelData(const UFuelItemAsset* NewData);
+
 	// The source item name of the fuel item
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FName properName = FName();
+	const UFuelItemAsset* ItemAsset;
 
 	// The amount of time in seconds each of this fuel provides
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -30,8 +76,8 @@ struct T5GINVENTORYSYSTEM_API FStFuelData : public FTableRowBase
 
 	// The items that are created when x1 quantity of this item is burned off
 	// Can be nothing/empty.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TMap<FName, int> byProducts;
+	
+	TArray<FFuelByProduct> byProducts;
 	
 };
 
@@ -40,26 +86,5 @@ class T5GINVENTORYSYSTEM_API UFuelSystem : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 public:
-	
-	// Returns a pointer to the item data table for manual operations
-	UFUNCTION(BlueprintPure, Category = "Fuel Data System Globals")
-	static UDataTable* getFuelItemDataTable();
-
-	// Gets the item data structure from the given item name ('food_carrot')
-	// Performs an O(1) lookup, but retrieves data, which is slower than direct access.
-	UFUNCTION(BlueprintPure, Category = "Fuel Data System Globals")
-	static FStFuelData getFuelItemFromName(FName itemName);
-	
-	UFUNCTION(BlueprintPure, Category = "Fuel Data System Globals")
-	static bool getFuelNameIsValid(FName itemName, bool performLookup = false);
-	
-	UFUNCTION(BlueprintPure, Category = "Fuel Data System Globals")
-	static bool getFuelItemIsValid(FStFuelData itemData);
-	
-	UFUNCTION(BlueprintPure, Category = "Fuel Data System Globals")
-	static FTimespan getFuelBurnTimeByName(FName itemName);
-	
-	UFUNCTION(BlueprintPure, Category = "Fuel Data System Globals")
-	static FTimespan getFuelBurnTime(FStFuelData itemData);
 	
 };

@@ -158,31 +158,21 @@ void UCraftingComponent::SetOutputInventory(UInventoryComponent* outputInventory
 		mInventoryInput = nullptr;
 }
 
-bool UCraftingComponent::RequestToCraft(FName itemName)
+bool UCraftingComponent::RequestToCraft(const UCraftingItemData* RecipeData)
 {
-	if (!bCraftingReady) return false;
+	if (!bCraftingReady)									{return false;}
+	if (!GetOwner()->HasAuthority())						{return false;}
+	if (!IsValid(mInventoryInput))							{return false;}
+	if (mCraftingQueue.Num() >= mCraftingQueueSize)			{return false;}
 	
-	// Only works on authority
-	if (!GetOwner()->HasAuthority()) return false;
-
-	// Must have a valid input inventory
-	if (!IsValid(mInventoryInput)) return false;
-
-	// Queue is Full
-	if (mCraftingQueue.Num() >= mCraftingQueueSize) return false;
-	
-	const FStCraftingRecipe craftRecipe = UCraftSystem::getRecipeFromItemName(itemName);
-	const FStItemData itemData = UItemSystem::getItemDataFromItemName(itemName);
-	
-	FStCraftQueueData craftQueueData(craftRecipe.itemName, itemData.itemThumbnail);
-	
-	if (UCraftSystem::getRecipeIsValid(craftRecipe))
-		mCraftingQueue.Add(craftQueueData);
+	mCraftingQueue.Add(FStCraftQueueData( RecipeData ));
 
 	if (!mCraftingQueue.IsEmpty())
 	{
 		if (bInstantCraft)
+		{
 			DoCraftingTick();
+		}
 		else
 		{
 			ResumeCrafting();
@@ -214,14 +204,17 @@ bool UCraftingComponent::CancelCrafting(int queueIndex)
 	if (mCraftingQueue.IsValidIndex(queueIndex))
 	{
 		const FStCraftQueueData craftQueue = mCraftingQueue[queueIndex];
-		const FStCraftingRecipe craftRecipe = UCraftSystem::getRecipeFromItemName(craftQueue.itemName);
+		const UCraftingItemData* craftRecipe = craftQueue.ItemAsset;
 		mCraftingQueue.RemoveAt(queueIndex);
-		const int ingredientMultiplier = FMath::Floor(craftQueue.ticksCompleted / craftRecipe.tickConsume);
+		const int ingredientMultiplier = FMath::Floor(craftQueue.ticksCompleted / craftRecipe->tickConsume);
 		if (ingredientMultiplier > 0)
 		{
-			for (const TPair<FName, int> thisRecipe : craftRecipe.craftingRecipe)
-			mInventoryInput->AddItemFromDataTable(thisRecipe.Key, thisRecipe.Value * ingredientMultiplier,
-				-1, true, false, false);
+			for (const TPair<UItemDataAsset*, int> thisRecipe : craftRecipe->Ingredients)
+			{
+				mInventoryInput->AddItemFromDataAsset(thisRecipe.Key,
+					thisRecipe.Value * ingredientMultiplier,
+					-1, true, false, false);
+			}
 		}
 		return true;
 	}
@@ -235,19 +228,19 @@ bool UCraftingComponent::ConsumeIngredients(int idx)
 	
 	// Does input inventory have ALL of the ingredients required?
 	const FStCraftQueueData qData = mCraftingQueue[idx];
-	const FStCraftingRecipe recipeData = UCraftSystem::getRecipeFromItemName( qData.itemName );
+	const UCraftingItemData* recipeData = qData.ItemAsset;
 
-	for (const TPair<FName, int> craftRecipe : recipeData.craftingRecipe)
+	for (const TPair<FStItemData, int> craftRecipe : recipeData->Ingredients)
 	{
 		// If we hit an ingredient that isn't present, return and continue onto the next
-		if (mInventoryInput->GetQuantityOfItem(craftRecipe.Key) < craftRecipe.Value)
+		if (mInventoryInput->GetTotalQuantityByItem(craftRecipe.Key) < craftRecipe.Value)
 		{
 			return false;
 		}
 	}
 
 	// If all ingredients are present, deduct them, then tick
-	for (const TPair<FName, int> craftRecipe : recipeData.craftingRecipe)
+	for (const TPair<FStItemData, int> craftRecipe : recipeData->Ingredients)
 	{
 		UE_LOG(LogTemp, Display, TEXT("%s(%s): Consuming x%d of '%s' for crafting."),
 			*GetName(), GetOwner()->HasAuthority()?TEXT("SERVER"):TEXT("CLIENT"),
@@ -263,9 +256,9 @@ void UCraftingComponent::TickCraftingItem(int idx)
 	if (mCraftingQueue.IsValidIndex(idx))
 	{
 		// Check for ingredient consumption
-		const FStCraftingRecipe craftingRecipe = UCraftSystem::getRecipeFromItemName( mCraftingQueue[idx].itemName );
+		const UCraftingItemData* craftingRecipe = mCraftingQueue[idx].ItemAsset;
 
-		if (mCraftingQueue[idx].ticksCompleted % craftingRecipe.tickConsume == 0)
+		if (mCraftingQueue[idx].ticksCompleted % craftingRecipe->tickConsume == 0)
 		{
 			if (IsValid(mInventoryInput))
 			{
@@ -309,9 +302,9 @@ void UCraftingComponent::DoCraftingTick()
 	{
 		if (mCraftingQueue.IsValidIndex(i))
 		{
-			const FStCraftingRecipe craftingRecipe = UCraftSystem::getRecipeFromItemName( mCraftingQueue[i].itemName );
+			const UCraftingItemData* craftingRecipe = mCraftingQueue[i].ItemAsset;
 
-			if (mCraftingQueue[i].ticksCompleted < craftingRecipe.ticksToComplete)
+			if (mCraftingQueue[i].ticksCompleted < craftingRecipe->ticksToComplete)
 			{
 				TickCraftingItem(i);
 			}
@@ -323,9 +316,9 @@ void UCraftingComponent::DoCraftingTick()
 	{
 		if (mCraftingQueue.IsValidIndex(i))
 		{
-			const FStCraftingRecipe craftingRecipe = UCraftSystem::getRecipeFromItemName( mCraftingQueue[i].itemName );
+			const UCraftingItemData* craftingRecipe = mCraftingQueue[i].ItemAsset;
 
-			if (mCraftingQueue[i].ticksCompleted >= craftingRecipe.ticksToComplete)
+			if (mCraftingQueue[i].ticksCompleted >= craftingRecipe->ticksToComplete)
 			{
 				CompleteCraftingItem(i);
 				mCraftingQueue.RemoveAt(i);
@@ -359,12 +352,12 @@ void UCraftingComponent::CompleteCraftingItem(int queueSlot)
 	// Consume the ingredients
 	if (!ConsumeIngredients(queueSlot)) return;
 		
-	const FStCraftingRecipe craftingRecipe = UCraftSystem::getRecipeFromItemName( mCraftingQueue[queueSlot].itemName );
+	const UCraftingItemData* craftingRecipe = mCraftingQueue[queueSlot].ItemAsset;
 
 	// DO NOT remove from the queue once complete.
 	// Mark as complete, and wait for DoTick to handle.
-	const int itemsAdded = mInventoryOutput->AddItemFromDataTable(
-		mCraftingQueue[queueSlot].itemName, craftingRecipe.createsQuantity, -1,
+	const int itemsAdded = mInventoryOutput->AddItemFromDataAsset(
+		mCraftingQueue[queueSlot].ItemAsset, craftingRecipe->QuantityOnSuccess, -1,
 		true, true, true);
 	
 }

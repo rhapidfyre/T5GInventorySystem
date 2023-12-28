@@ -6,6 +6,7 @@
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_,					"Inventory");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_Slot,				"Inventory.SlotType");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_Slot_Uninit,		"Inventory.SlotType.Uninitialized");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_Slot_Generic,		"Inventory.SlotType.Generic");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_Slot_Equipment,	"Inventory.SlotType.Equipment");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_Slot_Locked,		"Inventory.SlotType.Locked");
@@ -14,6 +15,7 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_Slot_Hidden,		"Inventory.SlotType.Hidden");
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment,					"Equipment");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot,				"Equipment.SlotType");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Uninit,		"Inventory.SlotType.Uninitialized");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Primary,		"Equipment.SlotType.Primary");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Secondary,	"Equipment.SlotType.Secondary");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Ranged,		"Equipment.SlotType.Ranged");
@@ -37,6 +39,7 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Feet,			"Equipment.SlotType.Feet");
 // Generic Constructor for initializing an un-usable inventory slot
 FStInventorySlot::FStInventorySlot()
 {
+	
 }
 
 
@@ -45,12 +48,20 @@ FStInventorySlot::FStInventorySlot(const FGameplayTag& InvSlotType)
 	SetAsEquipmentSlot(InvSlotType);
 }
 
+FStInventorySlot::FStInventorySlot(const FStItemData& ItemReference)
+{
+	if (ItemReference.GetIsValidItem())
+	{
+		SetNewItemInSlot(FStItemData(ItemReference));
+	}
+}
+
 // For initializing with an item in it
-FStInventorySlot::FStInventorySlot(const UItemDataAsset* ItemDataAsset)
+FStInventorySlot::FStInventorySlot(const UItemDataAsset* ItemDataAsset, int OrderQuantity)
 {
 	if (IsValid(ItemDataAsset))
 	{
-		
+		SetNewItemInSlot(FStItemData(ItemDataAsset), OrderQuantity);
 	}
 }
 
@@ -58,16 +69,6 @@ FStInventorySlot::~FStInventorySlot()
 {
 	if (OnSlotActivated.IsBound()) { OnSlotActivated.Clear(); }
 	if (OnSlotUpdated.IsBound()) { OnSlotUpdated.Clear(); }
-}
-
-void FStInventorySlot::BindEventListeners()
-{
-	if (SlotItemData.GetIsValidItem())
-	{
-		SlotItemData.OnItemUpdated.AddUObject(this, &FStInventorySlot::OnItemUpdated);
-		SlotItemData.OnItemActivation.AddUObject(this, &FStInventorySlot::OnItemActivated);
-		SlotItemData.OnItemDurabilityChanged.AddUObject(this, &FStInventorySlot::OnItemDurabilityChanged);
-	}
 }
 
 
@@ -93,17 +94,22 @@ void FStInventorySlot::SetAsEquipmentSlot(const FGameplayTag& NewEquipmentTag)
 
 void FStInventorySlot::OnItemUpdated() const
 {
-	if (OnSlotUpdated.IsBound()) {OnSlotUpdated.Broadcast(*this, SlotNumber);}
+	if (OnSlotUpdated.IsBound()) {OnSlotUpdated.Broadcast(this->SlotNumber);}
 }
 
 void FStInventorySlot::OnItemActivated() const
 {
-	if (OnSlotActivated.IsBound()) {OnSlotActivated.Broadcast(*this, SlotNumber);}
+	if (OnSlotActivated.IsBound()) {OnSlotActivated.Broadcast(this->SlotNumber);}
 }
 
 void FStInventorySlot::OnItemDurabilityChanged(const float OldDurability, const float NewDurability) const
 {
-	if (OnSlotUpdated.IsBound()) {OnSlotUpdated.Broadcast(*this, SlotNumber);}
+	if (OnSlotUpdated.IsBound()) {OnSlotUpdated.Broadcast(this->SlotNumber);}
+}
+
+FGameplayTag FStInventorySlot::GetEquipmentTag() const
+{
+	return EquipmentTag;
 }
 
 void FStInventorySlot::DamageDurability(float DamageAmount)
@@ -116,42 +122,53 @@ void FStInventorySlot::RepairDurability(float RepairAmount)
 	SlotItemData.RepairItem(RepairAmount);
 }
 
-bool FStInventorySlot::AddQuantity(int AddAmount)
+bool FStInventorySlot::SetQuantity(int NewQuantity)
 {
-	if (!IsSlotEmpty())
-	{
-		// Item is stackable, and there is room for more
-		const int maxStack = SlotItemData.Data->GetItemMaxStackSize();
-		if ( (maxStack > 1) && (SlotQuantity < maxStack ) ) // Stackable
-		{
-			const int newQuantity = SlotQuantity + abs(AddAmount);
-			SlotQuantity = newQuantity > maxStack ? maxStack : newQuantity;
-			if (OnSlotUpdated.IsBound()) {OnSlotUpdated.Broadcast(*this);}
-		}
-	}
-	return false;
+	return SlotItemData.SetItemQuantity(NewQuantity);
 }
 
-bool FStInventorySlot::RemoveQuantity(int RemoveAmount)
+
+/**
+ * Adds a specified amount of the item to this slot
+ * @param OrderQuantity The amount to add to the slot
+ * @return The number of items actually added
+ */
+int FStInventorySlot::IncreaseQuantity(int OrderQuantity)
 {
-	if (!IsSlotEmpty())
-	{
-		// If the quantity changed and isn't empty when finished
-		const int NewQuantity = SlotQuantity - abs(RemoveAmount);
-		if (NewQuantity < SlotQuantity)
-		{
-			if (NewQuantity <= 0)	{ EmptyAndResetSlot(); }
-			else					{ SlotQuantity = NewQuantity; }
-			if (OnSlotUpdated.IsBound()) {OnSlotUpdated.Broadcast(*this);}
-			return true;
-		}
-	}
-	return false;
+	if (!ContainsValidItem()) { return SlotItemData.IncreaseQuantity(OrderQuantity); }
+	return 0;
+}
+
+/**
+ * Removes a specified amount of the item from this slot
+ * @param OrderQuantity The amount to remove from the slot
+ * @return The number of items actually removed
+ */
+int FStInventorySlot::DecreaseQuantity(int OrderQuantity)
+{
+	if (!ContainsValidItem()) { return SlotItemData.DecreaseQuantity(OrderQuantity); }
+	return 0;
+}
+
+int FStInventorySlot::GetQuantity() const
+{
+	if (ContainsValidItem()) { return SlotItemData.ItemQuantity;}
+	return 0;
+}
+
+bool FStInventorySlot::ContainsValidItem() const
+{
+	return SlotItemData.GetIsValidItem();
 }
 
 // Returns the data for the item in the slot
 // If the item is empty, it will return default item data
-FStItemData& FStInventorySlot::GetItemData()
+FStItemData* FStInventorySlot::GetItemData()
+{
+	return &SlotItemData;
+}
+
+FStItemData FStInventorySlot::GetCopyOfItemData() const
 {
 	return SlotItemData;
 }
@@ -159,19 +176,32 @@ FStItemData& FStInventorySlot::GetItemData()
 /**
  * Overwrites the existing item in this slot by copying the reference item,
  * without compromising the slot settings (equipment tag, etc)
- * @param ReferenceItem The item being referenced for the new item
- * @param NewQuantity The quantity of this slot, defaults to 1
+ * @param ReferenceItem		The item being referenced for the new item
+ * @param OverrideQuantity	Optional quantity override.
+ *							If <= 0, it will use the quantity from ReferenceItem
  */
-void FStInventorySlot::SetNewItemInSlot(const FStItemData& ReferenceItem, const int NewQuantity)
+void FStInventorySlot::SetNewItemInSlot(const FStItemData& ReferenceItem, const int OverrideQuantity)
 {
-	SlotItemData = FStItemData(ReferenceItem);
-	SlotQuantity = NewQuantity;
+	SlotItemData = FStItemData(ReferenceItem, OverrideQuantity);
+	if (OnSlotUpdated.IsBound()) {OnSlotUpdated.Broadcast(this->SlotNumber);}
 }
 
 // Returns TRUE if the slot is empty (qty < 1 or invalid item)
 bool FStInventorySlot::IsSlotEmpty() const
 {
-	return (SlotQuantity < 1 || !SlotItemData.GetIsValidItem());
+	return (!ContainsValidItem());
+}
+
+bool FStInventorySlot::IsSlotFull() const
+{
+	if (!ContainsValidItem()) { return false; }
+	return (GetQuantity() >= GetMaxStackAllowance());
+}
+
+float FStInventorySlot::GetWeight() const
+{
+	if (!ContainsValidItem()) { return 0.f; }
+	return SlotItemData.GetWeight();
 }
 
 /**
@@ -189,29 +219,20 @@ bool FStInventorySlot::ContainsItem(const FStItemData& ItemData, const bool bExa
 // Sets the slot to empty without changing the slot meta such as equipment type
 void FStInventorySlot::EmptyAndResetSlot()
 {
-	SlotQuantity = 0;
 	SlotItemData.DestroyItem();
+	if (OnSlotUpdated.IsBound()) {OnSlotUpdated.Broadcast(this->SlotNumber);}
 }
 
 int FStInventorySlot::GetMaxStackAllowance() const
 {
-	if (SlotItemData.GetIsValidItem())
-	{
-		return SlotItemData.Data->GetItemMaxStackSize();
-	}
-	return 0;
+	if (!ContainsValidItem()) { return 0; }
+	return SlotItemData.Data->GetItemMaxStackSize();
 }
 
 // Broadcasts OnSlotActivate and internally calls SlotItemData->Activate
-void FStInventorySlot::Activate() const
+void FStInventorySlot::Activate()
 {
-	if (!IsSlotEmpty())
-	{
-		// Activates the item in this slot.
-		// ReSharper disable once CppExpressionWithoutSideEffects
-		SlotItemData.ActivateItem();
-	}
-	// Activation of an empty slot?
-	else { OnSlotActivated.Broadcast(*this); }
+	if (!ContainsValidItem())	{ OnSlotActivated.Broadcast(SlotNumber); }
+	else						{ SlotItemData.ActivateItem(false); };
 }
 

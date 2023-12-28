@@ -22,7 +22,7 @@ public:
 	TArray<FStInventorySlot> LoadInventorySlots();
 
 	UFUNCTION(BlueprintCallable)
-	void SaveInventorySlots(const TArray<FStInventorySlot>& ArrayOfCopiedSlots);
+	void SaveInventorySlots(const TArray<FStInventorySlot> ArrayOfCopiedSlots);
 
 
 private:

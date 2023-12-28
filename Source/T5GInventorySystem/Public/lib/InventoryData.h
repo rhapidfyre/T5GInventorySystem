@@ -2,10 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
+#include "ItemData.h"
 
 #include "InventoryData.generated.h"
 
-struct FStStartingItem;
 /**
  * WARNING - If you CHANGE, ADD or REMOVE any of these enums,
  * you will need to go to       Content/AZ_Assets/DataTables
@@ -39,11 +39,11 @@ struct T5GINVENTORYSYSTEM_API FStInventoryNotify
 	GENERATED_BODY()
 
 	FStInventoryNotify() {};
-	FStInventoryNotify(FName iName, int iQuantity)
-		{ itemName = iName; itemQuantity = iQuantity; }
+	FStInventoryNotify(const FStItemData& NewItemData, const int NewQuantity)
+		: ItemData(NewItemData), itemQuantity(NewQuantity), wasAdded(NewQuantity > 0) {};
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FName itemName = FName();
+	FStItemData ItemData;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int itemQuantity = 0;
@@ -60,7 +60,7 @@ class T5GINVENTORYSYSTEM_API UInventoryDataAsset : public UDataAsset
 public:
 
 	UFUNCTION(BlueprintCallable)
-	TArray<class UStartingItemData*> GetStartingItems() const;
+	TArray<FStItemData> GetStartingItems() const;
 
 	// The total number of inventory slots, not accounting for backpacks or equipment slots
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) int NumberOfInventorySlots = 24;
@@ -79,6 +79,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bShowNotifications = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TArray<class UStartingItemData*> StartingItems;
+	TArray<UStartingItemData*> StartingItems;
 	
 };

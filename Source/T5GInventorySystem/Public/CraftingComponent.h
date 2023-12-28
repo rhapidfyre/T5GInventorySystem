@@ -63,11 +63,11 @@ public:
 	/**
 	 * Sends a request to the component to create the given item. Checks if mInventoryInput contains
 	 * all required recipe items, and that this component's actor class is a valid target for the recipe.
-	 * @param itemName The FName of the item from DT_ItemData that we want to craft
+	 * @param RecipeData The item from DA_ItemData that we want to craft
 	 * @return True if the recipe requirements were met
 	 */
 	UFUNCTION(BlueprintCallable)
-	bool RequestToCraft(FName itemName);
+	bool RequestToCraft(const UCraftingItemData* RecipeData);
 
 	UFUNCTION(BlueprintPure)
 	TArray<FStCraftQueueData> GetCraftingQueue() const { return mCraftingQueue; }
@@ -135,6 +135,7 @@ private:
 	// Makes replication easy and fast.
 	UPROPERTY(Replicated, ReplicatedUsing = OnRep_CraftingQueue)
 	TArray<FStCraftQueueData> mCraftingQueue;
+	
 	UFUNCTION(NetMulticast, Unreliable)
 	void OnRep_CraftingQueue();
 	

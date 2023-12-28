@@ -29,18 +29,15 @@ UFuelComponent::UFuelComponent()
 	SetupDefaults();
 }
 
-UFuelComponent::UFuelComponent(FName startingItem)
+UFuelComponent::UFuelComponent(const UFuelItemAsset* FuelAsset)
 {
-	if (UItemSystem::getItemNameIsValid(startingItem, true))
+	if (IsValid(FuelAsset))
 	{
-		const FStFuelData fuelData = UFuelSystem::getFuelItemFromName(startingItem);
-		if (UFuelSystem::getFuelItemIsValid(fuelData))
-		{
-			const FTimespan fuelTime = UFuelSystem::getFuelBurnTime(fuelData);
-			mCurrentFuelItem	= startingItem;
-			mTimeRemaining		= fuelTime.GetTotalSeconds();
-			OnFuelUpdated.Broadcast();
-		}
+		const FStFuelData fuelData = FStFuelData(FuelAsset);
+		const FTimespan fuelTime = FTimespan(fuelData.burnTime);
+		mCurrentFuelItem	= FStFuelData(FuelAsset);
+		mTimeRemaining		= fuelTime.GetTotalSeconds();
+		OnFuelUpdated.Broadcast();
 	}
 	SetupDefaults();
 }
@@ -52,18 +49,20 @@ void UFuelComponent::InitializeFuelSystem()
 		if (!bIsFuelSystemReady)
 		{
 			// Determine what fuel items are allowed for this entity
-			for (const FName fuelItem : FuelItemsAllowed)
+			for (UFuelItemAsset* fuelItem : FuelItemsAllowed)
 			{
 				if (!mAuthorizedFuel.Contains(fuelItem))
+				{
 					mAuthorizedFuel.Add(fuelItem);
+				}
 			}
 			//FuelItemsAllowed.Empty(0);
 	
 			// Get current/starting fuel item
-			if (UItemSystem::getItemNameIsValid(mCurrentFuelItem))
+			if ( IsValid(mCurrentFuelItem.ItemAsset) )
 			{
-				const FStFuelData fuelData = UFuelSystem::getFuelItemFromName(mCurrentFuelItem);
-				const FTimespan fuelTime = UFuelSystem::getFuelBurnTime(fuelData);
+				const FStFuelData fuelData = mCurrentFuelItem;
+				const FTimespan fuelTime = FTimespan(fuelData.burnTime);
 				mTimeRemaining = fuelTime.GetTotalSeconds();
 			}
 		
@@ -151,9 +150,9 @@ bool UFuelComponent::IsReserveFuelAvailable()
 {
 	if (IsValid(mInventoryFuel))
 	{
-		for (const FName fuelItem : mAuthorizedFuel)
+		for (const UFuelItemAsset* fuelItem : mAuthorizedFuel)
 		{
-			if (mInventoryFuel->GetSlotsWithItem(fuelItem).Num() > 0)
+			if (mInventoryFuel->GetTotalQuantityByItem(fuelItem) > 0)
 			{
 				return true;
 			}
@@ -164,16 +163,16 @@ bool UFuelComponent::IsReserveFuelAvailable()
 
 bool UFuelComponent::RemoveFuel()
 {
-	for (const FName fuelItem : mAuthorizedFuel)
+	for (const UFuelItemAsset* fuelItem : mAuthorizedFuel)
 	{
 		const int itemsRemoved = mInventoryFuel->RemoveItemByQuantity(fuelItem, 1);
 		if (itemsRemoved > 0)
 		{
 			mCurrentFuelItem = fuelItem;
-			if (UItemSystem::getItemNameIsValid(mCurrentFuelItem))
+			if (IsValid(mCurrentFuelItem.ItemAsset))
 			{
-				const FStFuelData fuelData = UFuelSystem::getFuelItemFromName(mCurrentFuelItem);
-				const FTimespan fuelTime = UFuelSystem::getFuelBurnTime(fuelData);
+				const FStFuelData fuelData = mCurrentFuelItem;
+				const FTimespan fuelTime = FTimespan(fuelData.burnTime);
 				mTimeRemaining = fuelTime.GetTotalSeconds();
 				return true;
 			}
@@ -188,9 +187,9 @@ int UFuelComponent::GetTotalFuelItemsAvailable()
 	int itemsAvailable = 0;
 	if (IsValid(mInventoryFuel))
 	{
-		for (const FName fuelItem : mAuthorizedFuel)
+		for (const FStFuelData fuelItem : mAuthorizedFuel)
 		{
-			itemsAvailable += mInventoryFuel->GetQuantityOfItem(fuelItem);
+			itemsAvailable += mInventoryFuel->GetTotalQuantityByItem(fuelItem);
 		}
 	}
 	return itemsAvailable;
@@ -201,11 +200,10 @@ FTimespan UFuelComponent::GetTotalFuelTimeAvailable()
 	FTimespan timespan(0,0,0);
 	if (IsValid(mInventoryFuel))
 	{
-		for (const FName fuelItem : mAuthorizedFuel)
+		for (const FStFuelData fuelItem : mAuthorizedFuel)
 		{
-			const int ttlInSlot = mInventoryFuel->GetQuantityOfItem(fuelItem);
-			const FStFuelData fuelData = UFuelSystem::getFuelItemFromName(fuelItem);
-			FTimespan burnTime = UFuelSystem::getFuelBurnTime(fuelData);
+			const int ttlInSlot = mInventoryFuel->GetTotalQuantityByItem(fuelItem);
+			FTimespan burnTime = FTimespan(fuelItem.burnTime);
 			timespan += FTimespan::FromSeconds(burnTime.GetTotalSeconds() * ttlInSlot);
 		}
 	}
@@ -288,7 +286,7 @@ void UFuelComponent::CheckForConsumption()
 			if (mTimeRemaining <= 0.f)
 			{
 				mTimeRemaining = 0.f;
-				mCurrentFuelItem = UItemSystem::getInvalidName();
+				mCurrentFuelItem = FStFuelData();
 				runSystem = !isOverflowing && IsReserveFuelAvailable();
 				if (runSystem)
 					runSystem = ConsumeQueuedItem();
@@ -322,14 +320,17 @@ bool UFuelComponent::ConsumeQueuedItem()
 
 void UFuelComponent::CreateByProduct(bool &isOverflowing)
 {
-	const FStFuelData fuelData = UFuelSystem::getFuelItemFromName(mCurrentFuelItem);
-	if (UItemSystem::getItemNameIsValid(fuelData.properName))
+	const FStFuelData fuelData = mCurrentFuelItem;
+	if (IsValid(fuelData.ItemAsset))
 	{
-		for (const TPair<FName,int> byProduct : fuelData.byProducts)
+		for (const FFuelByProduct& byProduct : fuelData.byProducts)
 		{
 			if (IsValid(mInventoryStatic))
 			{
-				mInventoryStatic->AddItemFromDataTable(byProduct.Key, byProduct.Value, true, true, false);
+				const int byMin = byProduct.MinimumQuantity > 0 ? byProduct.MinimumQuantity : 1;
+				const int byMax = byProduct.MaximumQuantity < byProduct.MinimumQuantity ? byProduct.MinimumQuantity : byProduct.MaximumQuantity;
+				const int randQuantity = FMath::RandRange(byMin, byMax);
+				mInventoryStatic->AddItemFromDataAsset(byProduct.Data, randQuantity,-1,true,true,true);
 			}
 			else
 			{
@@ -345,7 +346,11 @@ void UFuelComponent::CreateByProduct(bool &isOverflowing)
 														APickupActorBase::StaticClass(), spawnTransform);
 				if (IsValid(pickupItem))
 				{
-					pickupItem->SetupItemFromName(byProduct.Key, byProduct.Value);
+					const int byMin = byProduct.MinimumQuantity > 0 ? byProduct.MinimumQuantity : 1;
+					const int byMax = byProduct.MaximumQuantity < byProduct.MinimumQuantity ? byProduct.MinimumQuantity : byProduct.MaximumQuantity;
+					const int randQuantity = FMath::RandRange(byMin, byMax);
+					FStItemData TempItem(byProduct, randQuantity);
+					pickupItem->SetupItem(TempItem);
 					pickupItem->FinishSpawning(spawnTransform);
 				}
 			}

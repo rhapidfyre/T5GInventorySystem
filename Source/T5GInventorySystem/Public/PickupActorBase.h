@@ -22,27 +22,14 @@ public:
 
 	virtual void PostLoad() override;
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings");
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Actor Settings");
 	float SphereRadius = 64.0f;
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings");
-	float ItemDurability = 0.f;
 
-	// Used to set the item that will spawn prior to BeginPlay()
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings");
-	FName ItemName = FName();
-
-	// Used to set how many items will spawn prior to BeginPlay()
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Actor Settings");
-	int SpawnQuantity = 1;
-
-	/*
-	 * Sets up a pickup actor containing a new item by the given name.
-	 * @param ItemName The name of the item to look up in the data table
-	 * @param quantity The number of items in this pickup actor
-	 */
 	UFUNCTION(BlueprintCallable)
-	void SetupItemFromName(FName NewItemName, int NewItemQuantity = 1);
+	void SetupItem(const FStItemData& ItemData, int OrderQuantity = 1);
+
+	UFUNCTION(BlueprintPure) int		 GetItemQuantity() const { return ItemQuantity; }
+	UFUNCTION(BlueprintPure) FStItemData GetItemData() const { return ItemData; }
 
 	UFUNCTION(BlueprintCallable)
 	void OnPickedUp(AActor* targetActor);
@@ -61,22 +48,38 @@ private:
 	void SetupItemData();
 
 public:
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	USphereComponent* PickUpDetection;
 
+	// used in blueprints to create pick up actors in the world
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UItemDataAsset* ItemDataAsset = nullptr;
+
+	// used in blueprints to create pick up actors in the world
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int StartingQuantity = 1;;
+
 private:
+
+	// Used to set how many items will spawn prior to BeginPlay()
+	UPROPERTY(Replicated);
+	int ItemQuantity = 1;
+	
+	// Used to set the item that will spawn prior to BeginPlay()
+	UPROPERTY(Replicated) FStItemData ItemData;
 	
 	// Used to simulate physics without a huge amount of bandwith use
-	UPROPERTY(Replicated) FTransform m_WorldTransform;
-
-	// A pseudo-slot for managing durability, quantity, etc
-	UPROPERTY(Replicated) FStInventorySlot m_Slot = FStInventorySlot();
+	UPROPERTY(Replicated) FTransform WorldTransform_;
 	
-	FTimerHandle m_WaitTimer;
+	FTimerHandle WaitTimer_;
 	
-	float m_SphereRadius = 64.0f;
+	float SphereRadius_ = 64.0f;
 
 	// Flipped to true while the pickup actor is processing a pickup request
 	bool bIsOperating = false;
+
+	// Flips to true once the pickup actor has initialized and can be acted upon
+	bool bReady = false;
 	
 };

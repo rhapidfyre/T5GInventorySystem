@@ -45,9 +45,9 @@ static int DetermineQuantity(int minRolls = 1, int maxRolls = 1)
  * such as durability, quantity, rarity and spawn chances.
  * @return Array of items to start with, pre-generated.
  */
-TArray<UStartingItemData*> UInventoryDataAsset::GetStartingItems() const
+TArray<FStItemData> UInventoryDataAsset::GetStartingItems() const
 {
-	TArray<UStartingItemData*> stStartingItems = {};
+	TArray<FStItemData> stStartingItems = {};
 	if (StartingItems.Num() > 0)
 	{
 		for (UStartingItemData* startItem : StartingItems)
@@ -66,6 +66,9 @@ TArray<UStartingItemData*> UInventoryDataAsset::GetStartingItems() const
 			
 			if (winningRoll)
 			{
+				FStItemData NewItem(startItem);
+				NewItem.DurabilityNow = startItem->GetItemMaxDurability();
+				NewItem.bIsEquipped   = startItem->bEquipOnStart;
 				stStartingItems.Add(startItem);
 			}
 			

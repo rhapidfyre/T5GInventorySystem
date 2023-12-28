@@ -4,7 +4,7 @@
 #include "CoreMinimal.h"
 #include "InventoryComponent.h"
 #include "Components/ActorComponent.h"
-#include "lib/ItemData.h"
+#include "lib/FuelData.h"
 
 #include "FuelComponent.generated.h"
 
@@ -24,8 +24,8 @@ public:
 	// Sets default values for this component's properties
 	UFuelComponent();
 	
-	// Sets default values and loads x1 of 'startingItem' into the system
-	UFuelComponent(FName startingItem);
+	// Sets default values and loads x1 of 'FuelAsset' into the system
+	UFuelComponent(const UFuelItemAsset* FuelAsset);
 
 	UFUNCTION(BlueprintCallable)
 	void InitializeFuelSystem();
@@ -77,7 +77,7 @@ public:
 	 * @return FName with item name of current fuel
 	 */
 	UFUNCTION(BlueprintPure)
-	FName GetCurrentFuelItem() const { return mCurrentFuelItem; }
+	FStFuelData GetCurrentFuelItem() const { return mCurrentFuelItem; }
 
 	/**
 	 * Returns the total amount of time given all fuel items available.
@@ -120,7 +120,7 @@ public:
 	 * items in order of this array as an order of precedence. 
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TArray<FName> FuelItemsAllowed;
+	TArray<UFuelItemAsset*> FuelItemsAllowed;
 	
 protected:
 	// Called when the game starts
@@ -153,8 +153,9 @@ private:
 	UPROPERTY() FTimerHandle mFuelTimer;
 
 	UFUNCTION(Client, Reliable) void OnRep_CurrentFuelItem();
+	
 	UPROPERTY(Replicated, ReplicatedUsing=OnRep_CurrentFuelItem)
-	FName mCurrentFuelItem = UItemSystem::getInvalidName();
+	FStFuelData mCurrentFuelItem = FStFuelData();
 
 	// Seconds remaining until fuel is consumed
 	UPROPERTY(Replicated)
@@ -168,6 +169,6 @@ private:
 
 	bool bShowDebug = false;
 
-	TArray<FName> mAuthorizedFuel;
+	UPROPERTY() TArray<UFuelItemAsset*> mAuthorizedFuel;
 	
 };
