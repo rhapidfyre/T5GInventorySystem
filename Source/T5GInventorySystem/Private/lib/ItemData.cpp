@@ -1,6 +1,7 @@
 
 #include "lib/ItemData.h"
 
+#include "lib/EquipmentData.h"
 #include "lib/InventorySlot.h"
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Equipment, 	"Item.Category.Equipment");
@@ -15,6 +16,12 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Fuel, 			"Item.Category.Fuel");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Utility, 		"Item.Category.Utility");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Ingredient, 	"Item.Category.Ingredient");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Component, 	"Item.Category.Component");
+
+UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Generic,		"Item.Generic");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Equipment,		"Item.Equipment");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Edible,			"Item.Edible");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Drink,			"Item.Drink");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Focus,			"Item.Focus");
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Rarity_Trash,		"Item.Rarity.Trash");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Rarity_Common,		"Item.Rarity.Common");
@@ -108,30 +115,29 @@ bool UPrimaryItemDataAsset::GetIsItemConsumedOnUse() const
 	return bConsumeOnUse;
 }
 
-bool UPrimaryItemDataAsset::GetCanEquipInSlot(const FGameplayTag& EquipmentSlotTag) const
-{
-	return EquippableSlots.HasTag(EquipmentSlotTag);
-}
-
 bool UPrimaryItemDataAsset::GetItemHasCategory(const FGameplayTag& ChallengeTag) const
 {
 	return ItemCategories.HasTag(ChallengeTag);
 }
 
-bool UPrimaryItemDataAsset::GetCanItemActivate() const
+bool UItemDataAsset::GetCanItemActivate() const
 {
 	if (ItemActivation.IsValid()) { return true; }
 	return false;
 }
 
+/**
+ * Returns a container of all tags applied to each child class & the parent
+ * @param TagOptions All of the tags applied to this item
+ */
+void UItemDataAsset::GetItemTagOptions(FGameplayTagContainer& TagOptions) const
+{
+	TagOptions.AddTag(ItemActivation);
+}
+
 FGameplayTagContainer UPrimaryItemDataAsset::GetItemCategories() const
 {
 	return ItemCategories;
-}
-
-FGameplayTagContainer UPrimaryItemDataAsset::GetItemEquippableSlots() const
-{
-	return EquippableSlots;
 }
 
 
@@ -184,6 +190,19 @@ FStItemData::~FStItemData()
 	if (OnItemUpdated.IsBound()) { OnItemUpdated.Clear(); }
 	if (OnItemActivation.IsBound()) { OnItemActivation.Clear(); }
 	if (OnItemDurabilityChanged.IsBound()) { OnItemDurabilityChanged.Clear(); }
+}
+
+FGameplayTagContainer FStItemData::GetValidEquipmentSlots() const
+{
+	if (GetIsValidItem())
+	{
+		// Is an equipment tag
+		if ( GetIsValidEquipmentItem() )
+		{
+			return GetValidEquipmentSlots();
+		}
+	}
+	return {};
 }
 
 FString FStItemData::ToString() const
@@ -426,6 +445,17 @@ bool FStItemData::GetIsExactSameItem(const FStItemData& ItemStruct) const
 	return false;
 }
 
+bool FStItemData::GetIsValidEquipmentItem() const
+{
+	if (IsValid(Data))
+	{
+		FGameplayTagContainer TagContainer;
+		Data->GetItemTagOptions(TagContainer);
+		return TagContainer.HasTag(TAG_Item_Equipment);
+	}
+	return false;
+}
+
 bool FStItemData::GetIsItemDamaged() const
 {
 	if (GetIsValidItem())
@@ -451,31 +481,5 @@ bool FStItemData::GetIsItemFragile() const
 bool FStItemData::GetIsItemUnbreakable() const
 {
 	if (GetIsValidItem()) {return Data->GetItemMaxDurability() < 0.f;}
-	return false;
-}
-
-FGameplayTagContainer FStItemData::GetValidEquipmentSlots() const
-{
-	if (GetIsValidItem()) {return Data->GetItemEquippableSlots();}
-	return FGameplayTagContainer();
-}
-
-bool FStItemData::GetIsValidFitToSlot(const FGameplayTag& SlotTag) const
-{
-	if (GetIsValidItem())
-	{
-		// Is an equipment tag
-		if (SlotTag.RequestDirectParent() == TAG_Equipment_Slot.GetTag())
-		{
-			const FGameplayTagContainer EquipSlotTags = GetValidEquipmentSlots();
-			return EquipSlotTags.HasTag(SlotTag);
-		}
-		
-		// If we match any of the valid tags, it's a valid non-equipment slot
-		FGameplayTagContainer ValidSlotTags;
-		ValidSlotTags.AddTag( TAG_Inventory_Slot_Equipment.GetTag() );
-		ValidSlotTags.AddTag( TAG_Inventory_Slot_Generic.GetTag() );
-		return !SlotTag.MatchesAny(ValidSlotTags);
-	}
 	return false;
 }

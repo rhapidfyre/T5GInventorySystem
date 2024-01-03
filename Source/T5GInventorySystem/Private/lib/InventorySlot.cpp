@@ -4,7 +4,7 @@
 #include "Logging/StructuredLog.h"
 
 
-UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_,					"Inventory");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory,					"Inventory");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_Slot,				"Inventory.SlotType");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_Slot_Uninit,		"Inventory.SlotType.Uninitialized");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_Slot_Generic,		"Inventory.SlotType.Generic");

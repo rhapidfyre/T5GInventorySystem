@@ -59,24 +59,6 @@ struct T5GINVENTORYSYSTEM_API FStCraftRecycleData : public FTableRowBase
 	bool spawnsInWorld = false;
 };
 
-// Simple struct for replication
-USTRUCT(BlueprintType)
-struct T5GINVENTORYSYSTEM_API FStCraftQueueData
-{
-	GENERATED_BODY()
-
-	FStCraftQueueData() : ticksCompleted(0) {};
-	FStCraftQueueData(const UCraftingItemData* NewData)
-		: ItemAsset(NewData), ticksCompleted(0) {};
-	
-	// The item name being crafted (also the row name for the data tables)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) const UCraftingItemData* ItemAsset = nullptr;
-	
-	// How many crafting ticks have passed
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) int   ticksCompleted;
-	
-};
-
 
 UCLASS()
 class T5GINVENTORYSYSTEM_API UCraftSystem : public UBlueprintFunctionLibrary

@@ -10,8 +10,10 @@
 
 #include "CraftingComponent.generated.h"
 
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnItemCreated, int, slotNumber);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnQueueUpdated, int, slotNumber);
+
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class T5GINVENTORYSYSTEM_API UCraftingComponent : public UActorComponent
@@ -67,16 +69,16 @@ public:
 	 * @return True if the recipe requirements were met
 	 */
 	UFUNCTION(BlueprintCallable)
-	bool RequestToCraft(const UCraftingItemData* RecipeData);
+	bool RequestToCraft(const UItemDataAsset* RecipeData);
 
-	UFUNCTION(BlueprintPure)
-	TArray<FStCraftQueueData> GetCraftingQueue() const { return mCraftingQueue; }
+	//UFUNCTION(BlueprintPure)
+	//TArray<FStCraftQueueData> GetCraftingQueue() const { return mCraftingQueue; }
 
-	UFUNCTION(BlueprintPure)
-	FStCraftQueueData GetItemInCraftingQueue(int slotNumber = 0);
+	//UFUNCTION(BlueprintPure)
+	//FStCraftQueueData GetItemInCraftingQueue(int slotNumber = 0);
 
-	UFUNCTION(BlueprintPure)
-	int GetNumItemsInCraftingQueue() const { return mCraftingQueue.Num(); }
+	//UFUNCTION(BlueprintPure)
+	//int GetNumItemsInCraftingQueue() const { return mCraftingQueue.Num(); }
 
 	/** Cancel an item currently being crafted. Refunds any consumed ingredients.
 	 * @param queueIndex The index of the queue to be removed/canceled
@@ -131,10 +133,12 @@ private:
 
 	UPROPERTY() FTimerHandle mCraftingTimer;
 
+	//UPROPERTY() FRWLock CraftingMutex;
+
 	// Contains the item name, item texture, and ticks completed
 	// Makes replication easy and fast.
-	UPROPERTY(Replicated, ReplicatedUsing = OnRep_CraftingQueue)
-	TArray<FStCraftQueueData> mCraftingQueue;
+	//UPROPERTY(Replicated, ReplicatedUsing = OnRep_CraftingQueue)
+	//TArray<FStCraftQueueData> mCraftingQueue;
 	
 	UFUNCTION(NetMulticast, Unreliable)
 	void OnRep_CraftingQueue();

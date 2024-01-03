@@ -1,37 +1,57 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "Engine/DataTable.h"
+#include "GameplayEffect.h"
+#include "ItemData.h"
 
 #include "EquipmentData.generated.h"
 
 
 /**
- * WARNING - If you CHANGE, ADD or REMOVE any of these enums,
- * you will need to go to     Content/AZ_Assets/DataTables
- * and update the             DT_SlotIcons
+ * Equipment items are subsets (children) of Item Data that contain information
+ * specifically regarding equipment, such as what mesh is used when it is worn
  */
-UENUM(BlueprintType)
-enum class EEquipmentSlotType : uint8
+UCLASS(BlueprintType)
+class T5GINVENTORYSYSTEM_API UEquipmentItemData : public UItemDataAsset
 {
-	NONE, PRIMARY, SECONDARY, HELMET, FACE, NECK, SHOULDERS, BACK, TORSO,
-	WAIST, HANDS, LEGS, ANKLET, FEET, SLEEVES, COSMETIC, EARRINGLEFT, EARRINGRIGHT,
-	RINGLEFT, RINGRIGHT, WRISTLEFT, WRISTRIGHT
-};
+	GENERATED_BODY()
 
-USTRUCT(BlueprintType, Blueprintable)
-struct FStEquipmentData : public FTableRowBase
-{
-	GENERATED_BODY();
-	// The values affected by donning this equipment
+
+public:
+
+	UEquipmentItemData() {};
+
+	UFUNCTION(BlueprintType)
+	bool GetCanEquipInSlot(const FGameplayTag& EquipmentSlotTag) const
+	{
+		return EquippableSlots.HasTag(EquipmentSlotTag);
+	}
+
+	FGameplayTagContainer GetItemEquippableSlots() const
+	{
+		return EquippableSlots;
+	}
+
+	virtual void GetItemTagOptions(FGameplayTagContainer& TagOptions) const override;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) int AddMaxHealth = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) int AddMaxStamina = 0;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) int AddMaxMagic = 0;
+	// The mesh worn by typically masculine wearers. This is the default if feminine is nullptr.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	USkeletalMesh* MeshMasculine = nullptr;
+
+	// The mesh used by typically feminine wearers.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	USkeletalMesh* MeshFeminine  = nullptr;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) float ModifyHungerRate = 0.f;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) float ModifyThirstRate = 0.f;
+	// What body part this mesh is associated with (body part "slot")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTagContainer EquippableSlots = {};
 	
-	// The higher the percentage of enhanced focus, the less like a spell will be interrupted when struck
-	UPROPERTY(EditAnywhere, BlueprintReadWrite) float EnhancedFocus = 0;
+	// Which part parts will be hidden if this mesh is equipped. Overridden by "ShowsBodyParts"
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTagContainer HidesBodyParts = {};
+	
+	// Which body parts MUST be visible if this mesh is equipped. Overrules "ShowsBodyParts".
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTagContainer ShowsBodyParts = {};
+	
+	// Effect(s) to apply as long as the item is equipped
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<UGameplayEffect*> EffectsEquipped = {};
+	
+	// Effect(s) to apply to the character who has this item in their inventory
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<UGameplayEffect*> EffectsPassive = {};
 };

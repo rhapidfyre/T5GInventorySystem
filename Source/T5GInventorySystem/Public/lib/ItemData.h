@@ -16,6 +16,7 @@
 
 #include "ItemData.generated.h"
 
+
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Equipment);	// Used as equipment
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_QuestItem);	// Used in a quest
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Drinkable);	// Can be drank
@@ -28,6 +29,12 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Fuel);			// Used as fuel for a 
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Utility);		// An item that provide a function when in possession
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Ingredient);	// Used as an ingredient to a crafting recipe
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Component);	// Used as part of a final product, like a battery
+
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Generic);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Equipment);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Edible);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Drink);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Focus);
 
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Trash);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Common);
@@ -43,18 +50,41 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Activation_Eat);     // Activating eats 
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Activation_Emplace); // Starts the placement system
 
 
-// Obsolete?
-UCLASS(BlueprintType)
-class T5GINVENTORYSYSTEM_API UItemSystem : public UBlueprintFunctionLibrary
+USTRUCT(BlueprintType)
+struct T5GINVENTORYSYSTEM_API FCraftingRecipe
 {
 	GENERATED_BODY()
-public:
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	class UItemDataAsset* ResultingItem = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	float ChanceSuccess = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int QuantityOnSuccess = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FGameplayTag MinimumRarity = TAG_Item_Rarity_Rare.GetTag();
+
+	// How many seconds it takes to complete this item
+	// If you want ingredients to be consumed on completion, this time should
+	// be divisible by 'tickConsume' (i.e. 300 ticks, 30 tick consume)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int ticksToComplete = 1;
+
+	// How many ticks between ingredient consumption.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int tickConsume = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TMap<UItemDataAsset*, int> Ingredients = {};
 	
 };
 
 
 /**
- * Defines variables that all items share, as well as accessors/mutators
+ * Defines variables that all items share, as well as accessors/mutators.
  */
 UCLASS(BlueprintType)
 class T5GINVENTORYSYSTEM_API UPrimaryItemDataAsset : public UPrimaryDataAsset
@@ -64,9 +94,7 @@ class T5GINVENTORYSYSTEM_API UPrimaryItemDataAsset : public UPrimaryDataAsset
 public:
 
 	UPrimaryItemDataAsset()
-		: ItemRarity(TAG_Item_Rarity_Trash),
-		  ItemActivation(TAG_Item_Activation_Trigger)
-		{};
+		: ItemType(TAG_Item_Generic.GetTag()), ItemRarity(TAG_Item_Rarity_Trash) {};
 	
 	UFUNCTION(BlueprintPure) int			GetItemPrice() const;
 	UFUNCTION(BlueprintPure) int			GetItemMaxStackSize() const;
@@ -83,17 +111,17 @@ public:
 	UFUNCTION(BlueprintPure) bool	GetIsItemFragile() const;
 	UFUNCTION(BlueprintPure) bool	GetIsItemDroppable() const;
 	UFUNCTION(BlueprintPure) bool	GetIsItemConsumedOnUse() const;
-	UFUNCTION(BlueprintPure) bool	GetCanEquipInSlot(const FGameplayTag& EquipmentSlotTag) const;
 	UFUNCTION(BlueprintPure) bool	GetItemHasCategory(const FGameplayTag& ChallengeTag) const;
-	UFUNCTION(BlueprintPure) bool	GetCanItemActivate() const;
 	
 	UFUNCTION(BlueprintPure) FGameplayTagContainer GetItemCategories() const;
-	UFUNCTION(BlueprintPure) FGameplayTagContainer GetItemEquippableSlots() const;
 
 protected:
 	
 	// Name displayed for this item
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) FText DisplayName = FText();
+	
+	// Name displayed for this item
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTag ItemType;
 
 	// UI Description of this item
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) FString ItemDescription = "";
@@ -104,12 +132,6 @@ protected:
 	// Categories the item belongs to
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FGameplayTagContainer ItemCategories;
 
-	// How the item activates
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FGameplayTag ItemActivation;
-
-	// If item can be equipped, this is a list of all eligible slots this item fits in
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FGameplayTagContainer EquippableSlots;
-
 	// <= 1 means it does not stack
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)	int MaxStackSize = 1;
 
@@ -119,7 +141,7 @@ protected:
 	// The visual used for UI presentation
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)	UTexture2D* ItemThumbnail = nullptr;
 
-	// The appearance of the item when spawned
+	// The appearance of the item when spawned in the world as a prop
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)	UStaticMesh* Mesh = nullptr;
 
 	// XYZ location adjustment from attach point
@@ -151,7 +173,10 @@ protected:
 
 
 /**
- * Data belonging to a specific item, such as a carrot or a sword.
+ * Data belonging to a specific item, such as a carrot or a sword. These are
+ * items that are manipulated inside of an inventory. They can be equipment,
+ * weapons, edibles, drinks, spell focus, etc. Anything that goes into the
+ * inventory is a child of UItemDataAsset.
  */
 UCLASS(BlueprintType)
 class T5GINVENTORYSYSTEM_API UItemDataAsset : public UPrimaryItemDataAsset
@@ -160,43 +185,18 @@ class T5GINVENTORYSYSTEM_API UItemDataAsset : public UPrimaryItemDataAsset
 	
 public:
 
+	UItemDataAsset() : ItemActivation(TAG_Item_Activation_Trigger) {};
+	
 	UFUNCTION(BlueprintPure) UItemDataAsset* CopyAsset() const;
 	
-};
-
-
-/**
- * Items that are craft-able
- */
-UCLASS(BlueprintType)
-class T5GINVENTORYSYSTEM_API UCraftingItemData : public UItemDataAsset
-{
-	GENERATED_BODY()
+	UFUNCTION(BlueprintPure) bool	GetCanItemActivate() const;
 	
-public:
+	virtual void	GetItemTagOptions(FGameplayTagContainer& TagOptions) const;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UItemDataAsset* ResultingItem = nullptr;
+	// How the item activates
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FGameplayTag ItemActivation;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float ChanceSuccess = 1.f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int QuantityOnSuccess = 1;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FGameplayTag MinimumRarity = TAG_Item_Rarity_Rare.GetTag();
-
-	// How many seconds it takes to complete this item
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int ticksToComplete = 1;
-
-	// How many ticks between ingredient consumption
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int tickConsume = 1;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TMap<UItemDataAsset*, int> Ingredients = {};
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FCraftingRecipe CraftingRecipe;
 	
 };
 
@@ -253,44 +253,46 @@ struct T5GINVENTORYSYSTEM_API FStItemData
 	FStItemData(const UItemDataAsset* NewData, const int OrderQuantity = 1);
 	FStItemData(const FStItemData& OldItem, int OverrideQuantity = 0);
 
-	~FStItemData();
-
-	FString ToString() const;
-	float GetMaxDurability() const;
-	float GetModifiedItemValue() const;
-	float GetBaseItemValue() const;
+	virtual ~FStItemData();
 	
-	float RepairItem(const float AdditionValue);
-	float DamageItem(const float DeductionValue);
-
-	int GetMaxStackSize() const;
-	int IncreaseQuantity(const int OrderQuantity = 1);
-	int DecreaseQuantity(const int OrderQuantity = 1);
-
-	void DestroyItem();
-	void ReplaceItem(const FStItemData& NewItem);
-
-	float GetWeight() const;
-
-	bool GetCanActivate() const;
-	bool SetItemQuantity(int NewQuantity);
-	bool GetIsEmpty() const;
-	bool GetIsFull() const;
-	bool ActivateItem(bool bForceConsume);
-	bool GetIsValidItem() const { return IsValid(Data) && ItemQuantity > 0; }
 	bool GetIsSameItem(const FStItemData& ItemStruct) const;
 	bool GetIsExactSameItem(const FStItemData& ItemStruct) const;
-	bool GetIsItemDamaged() const;
-	bool GetIsItemDroppable() const;
-	bool GetIsItemFragile() const;
-	bool GetIsItemUnbreakable() const;
-	bool GetIsItemBroken() const { return DurabilityNow == 0.f; }
+	
+	bool GetIsValidEquipmentItem() const;
 	bool GetIsValidFitToSlot(const FGameplayTag& SlotTag) const;
 	
 	FGameplayTagContainer GetValidEquipmentSlots() const;
-	
-	bool bIsEquipped = false;
 
+	FString ToString() const;
+	float 	GetMaxDurability() const;
+	float 	GetModifiedItemValue() const;
+	float 	GetBaseItemValue() const;
+	
+	float 	RepairItem(const float AdditionValue);
+	float 	DamageItem(const float DeductionValue);
+
+	int 	GetMaxStackSize() const;
+	int 	IncreaseQuantity(const int OrderQuantity = 1);
+	int 	DecreaseQuantity(const int OrderQuantity = 1);
+
+	void 	DestroyItem();
+	void 	ReplaceItem(const FStItemData& NewItem);
+
+	float	GetWeight() const;
+
+	bool 	GetCanActivate() const;
+	bool 	SetItemQuantity(int NewQuantity);
+	bool 	GetIsEmpty() const;
+	bool 	GetIsFull() const;
+	bool 	ActivateItem(bool bForceConsume);
+	bool 	GetIsValidItem() const { return IsValid(Data) && ItemQuantity > 0; }
+	bool 	GetIsItemDamaged() const;
+	bool 	GetIsItemDroppable() const;
+	bool 	GetIsItemFragile() const;
+	bool 	GetIsItemUnbreakable() const;
+	bool 	GetIsItemBroken() const { return DurabilityNow == 0.f; }
+	
+	bool	bIsEquipped = false;
 
 	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) int ItemQuantity;
 
@@ -301,6 +303,6 @@ struct T5GINVENTORYSYSTEM_API FStItemData
 	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) FGameplayTag Rarity;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UItemDataAsset* Data; // References the data asset with static info
+	const UItemDataAsset* Data; // References the data asset with static info
 	
 };

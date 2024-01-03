@@ -81,8 +81,8 @@ void UCraftingComponent::SetCraftingEnabled(bool isEnabled)
 			if (bIsCraftingAllowed)
 			{
 				// Restart the queue
-				if (!mCraftingQueue.IsEmpty() && mCraftingTimer.IsValid())
-					GetWorld()->GetTimerManager().UnPauseTimer(mCraftingTimer);
+				//if (!mCraftingQueue.IsEmpty() && mCraftingTimer.IsValid())
+				//	GetWorld()->GetTimerManager().UnPauseTimer(mCraftingTimer);
 			}
 			else
 			{
@@ -158,17 +158,17 @@ void UCraftingComponent::SetOutputInventory(UInventoryComponent* outputInventory
 		mInventoryInput = nullptr;
 }
 
-bool UCraftingComponent::RequestToCraft(const UCraftingItemData* RecipeData)
+bool UCraftingComponent::RequestToCraft(const UItemDataAsset* RecipeData)
 {
 	if (!bCraftingReady)									{return false;}
 	if (!GetOwner()->HasAuthority())						{return false;}
 	if (!IsValid(mInventoryInput))							{return false;}
-	if (mCraftingQueue.Num() >= mCraftingQueueSize)			{return false;}
+	//if (mCraftingQueue.Num() >= mCraftingQueueSize)			{return false;}
 	
-	mCraftingQueue.Add(FStCraftQueueData( RecipeData ));
+	//mCraftingQueue.Add( RecipeData->CraftingRecipe );
 
-	if (!mCraftingQueue.IsEmpty())
-	{
+	//if (!mCraftingQueue.IsEmpty())
+	//{
 		if (bInstantCraft)
 		{
 			DoCraftingTick();
@@ -178,10 +178,11 @@ bool UCraftingComponent::RequestToCraft(const UCraftingItemData* RecipeData)
 			ResumeCrafting();
 		}
 		return true;
-	}
-	return false;
+	//}
+	//return false;
 }
 
+/*
 FStCraftQueueData UCraftingComponent::GetItemInCraftingQueue(int slotNumber)
 {
 	if (mCraftingQueue.IsValidIndex(slotNumber))
@@ -190,6 +191,7 @@ FStCraftQueueData UCraftingComponent::GetItemInCraftingQueue(int slotNumber)
 	}
 	return FStCraftQueueData();
 }
+*/
 
 bool UCraftingComponent::CancelCrafting(int queueIndex)
 {
@@ -200,7 +202,7 @@ bool UCraftingComponent::CancelCrafting(int queueIndex)
 
 	// Must have a valid input inventory
 	if (!IsValid(mInventoryInput)) return false;
-	
+	/*
 	if (mCraftingQueue.IsValidIndex(queueIndex))
 	{
 		const FStCraftQueueData craftQueue = mCraftingQueue[queueIndex];
@@ -218,18 +220,20 @@ bool UCraftingComponent::CancelCrafting(int queueIndex)
 		}
 		return true;
 	}
+	*/
 	return false;
 }
 
 bool UCraftingComponent::ConsumeIngredients(int idx)
 {
 	if (!GetOwner()->HasAuthority()) return false;
-	if (!mCraftingQueue.IsValidIndex(idx)) return false;
+	//if (!mCraftingQueue.IsValidIndex(idx)) return false;
 	
 	// Does input inventory have ALL of the ingredients required?
-	const FStCraftQueueData qData = mCraftingQueue[idx];
-	const UCraftingItemData* recipeData = qData.ItemAsset;
+	//const FStCraftQueueData qData = mCraftingQueue[idx];
+	//const UCraftingItemData* recipeData = qData.ItemAsset;
 
+	/*
 	for (const TPair<FStItemData, int> craftRecipe : recipeData->Ingredients)
 	{
 		// If we hit an ingredient that isn't present, return and continue onto the next
@@ -247,12 +251,14 @@ bool UCraftingComponent::ConsumeIngredients(int idx)
 			craftRecipe.Value, *craftRecipe.Key.ToString());
 		mInventoryInput->RemoveItemByQuantity(craftRecipe.Key, craftRecipe.Value);
 	}
+	*/
 	return true;
 }
 
 void UCraftingComponent::TickCraftingItem(int idx)
 {
 	if (!bCraftingReady) return;
+	/*
 	if (mCraftingQueue.IsValidIndex(idx))
 	{
 		// Check for ingredient consumption
@@ -269,6 +275,7 @@ void UCraftingComponent::TickCraftingItem(int idx)
 		else
 			mCraftingQueue[idx].ticksCompleted += 1;
 	}
+	*/
 }
 
 void UCraftingComponent::OnRep_CraftingQueue_Implementation()
@@ -283,6 +290,7 @@ void UCraftingComponent::DoCraftingTick()
 	if (!GetOwner()->HasAuthority()) return;
 	
 	// If instant crafting is on, complete all items that are in the queue.
+	/*
 	if (bInstantCraft)
 	{
 		for (int i = 0; i < mCraftingQueue.Num(); i++)
@@ -292,12 +300,14 @@ void UCraftingComponent::DoCraftingTick()
 		mCraftingQueue.Empty();
 		return;
 	}
+	*/
 	
 	if(!bCanTick) return;
 	bCanTick = false; // Mutex Unlock
 
 	// Tick the crafting queued items, and complete them if they're finished.
 	// Does not remove them from the queue. That comes next.
+	/*
 	for (int i = 0; i < mCraftingQueue.Num(); i++)
 	{
 		if (mCraftingQueue.IsValidIndex(i))
@@ -310,8 +320,10 @@ void UCraftingComponent::DoCraftingTick()
 			}
 		}
 	}
-
+	*/
+	
 	// Remove
+	/*
 	for (int i = mCraftingQueue.Num() - 1; i >= 0; i--)
 	{
 		if (mCraftingQueue.IsValidIndex(i))
@@ -334,7 +346,7 @@ void UCraftingComponent::DoCraftingTick()
 			StopCrafting();
 		}
 	}
-	
+	*/
 	bCanTick = true; // Mutex Unlock
 	
 }
@@ -346,6 +358,7 @@ void UCraftingComponent::CompleteCraftingItem(int queueSlot)
 	// Authority Only
 	if (!GetOwner()->HasAuthority()) return;
 
+	/*
 	// Validate the queue index
 	if (!mCraftingQueue.IsValidIndex(queueSlot)) return;
 
@@ -359,7 +372,7 @@ void UCraftingComponent::CompleteCraftingItem(int queueSlot)
 	const int itemsAdded = mInventoryOutput->AddItemFromDataAsset(
 		mCraftingQueue[queueSlot].ItemAsset, craftingRecipe->QuantityOnSuccess, -1,
 		true, true, true);
-	
+	*/
 }
 
 
@@ -372,5 +385,5 @@ void UCraftingComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME_CONDITION(UCraftingComponent, mInventoryInput, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(UCraftingComponent, mInventoryOutput, COND_OwnerOnly);
-	DOREPLIFETIME(UCraftingComponent, mCraftingQueue);
+	//DOREPLIFETIME(UCraftingComponent, mCraftingQueue);
 }

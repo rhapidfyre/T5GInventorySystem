@@ -25,7 +25,7 @@ public class T5GInventorySystem : ModuleRules
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Core", "Engine",
+				"Core", "Engine"
 			}
 			);
 			
@@ -38,6 +38,7 @@ public class T5GInventorySystem : ModuleRules
 				"Slate",
 				"SlateCore",
 				"GameplayTags",
+				"GameplayAbilities",
 				"EnhancedInput"
 			}
 			);

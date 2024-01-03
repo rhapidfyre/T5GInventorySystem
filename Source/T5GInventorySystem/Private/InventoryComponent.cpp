@@ -9,6 +9,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "lib/InventorySave.h"
 #include "lib/ItemData.h"
+#include "lib/EquipmentData.h"
 #include "Logging/StructuredLog.h"
 #include "Net/UnrealNetwork.h" // Used for replication
 
@@ -137,12 +138,14 @@ void UInventoryComponent::IssueStartingItems()
 			
 			if (StartingItem.bIsEquipped)
 			{
-				// Check each eligible equip slot for an open slot
-				for (const FGameplayTag EquipSlot : NewItem.Data->GetItemEquippableSlots())
+				if (StartingItem.GetIsValidEquipmentItem())
 				{
-					if (IsSlotEmptyByTag(EquipSlot))
+					for (const FGameplayTag EquipSlot : StartingItem.GetValidEquipmentSlots())
 					{
-						SlotNumber = GetSlotNumberByTag(EquipSlot);
+						if (IsSlotEmptyByTag(EquipSlot))
+						{
+							SlotNumber = GetSlotNumberByTag(EquipSlot);
+						}
 					}
 				}
 
@@ -1177,59 +1180,46 @@ int UInventoryComponent::SwapOrStackSlots(
 	const FStItemData* 	OriginItem 			= OriginSlot.GetItemData();
 	const FStItemData* 	TargetItem 			= TargetSlot.GetItemData();
 
-	// Non-equipment TargetSlot is receiving OriginSlot's equipment item
-	//   The target slot must be able to accept origin item's equipment type
-	if (!isOriginEquipSlot && isTargetEquipSlot)
+	/**
+	 * Equipment Slot Validation
+	 */
+	 
+	// Validates that the target item can fit into the origin slot's equipment slot type
+	if (isOriginEquipSlot && TargetItem != nullptr)
 	{
-		if (!OriginItem->GetValidEquipmentSlots().HasTag(TargetSlot.EquipmentTag))
+		if (isTargetEquipSlot)
 		{
-			UE_LOGFMT(LogTemp, Log,
-				"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - "
-				"Target (Slot {nTargetSlot}) is not a valid equipment slot for the origin item (Slot {nOriginSlot}).",
-				GetName(), HasAuthority()?"SRV":"CLI", TargetSlot.SlotNumber, OriginSlot.SlotNumber);
-			return false;
+			if (!TargetItem->GetValidEquipmentSlots().HasTag(OriginSlot.EquipmentTag))
+			{
+				UE_LOGFMT(LogTemp, Log,
+					"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - "
+					"Target (Slot {nTargetSlot}) is not a valid equipment slot for the origin item (Slot {nOriginSlot}).",
+					GetName(), HasAuthority()?"SRV":"CLI", TargetSlot.SlotNumber, OriginSlot.SlotNumber);
+				return false;
+			}
 		}
 	}
 	
-	// Equipment OriginSlot is going to a Non-Equipment TargetSlot
-	//   The origin slot must be able to accept target's equipment type
-	else if (isOriginEquipSlot && !isTargetEquipSlot)
+	// Validates that the origin item can fit into the target slot's equipment slot type
+	if (isTargetEquipSlot && OriginItem != nullptr)
 	{
-		if (TargetItem->GetValidEquipmentSlots().HasTag(OriginSlot.EquipmentTag))
+		if (isOriginEquipSlot)
 		{
-			UE_LOGFMT(LogTemp, Log,
-				"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - "
-				"Target (Slot {nTargetSlot}) is not a valid equipment slot for the origin item (Slot {nOriginSlot}).",
-				GetName(), HasAuthority()?"SRV":"CLI", TargetSlot.SlotNumber, OriginSlot.SlotNumber);
-			return false;
+			// Check equipment item (target) not allowed in the origin slot
+			if (!OriginItem->GetValidEquipmentSlots().HasTag(TargetSlot.EquipmentTag))
+			{
+				UE_LOGFMT(LogTemp, Log,
+					"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - "
+					"Target (Slot {nTargetSlot}) is not a valid equipment slot for the origin item (Slot {nOriginSlot}).",
+					GetName(), HasAuthority()?"SRV":"CLI", OriginSlot.SlotNumber, TargetSlot.SlotNumber);
+				return false;
+			}
 		}
 	}
 
-	// If both items are equipment, we need to make sure each item's equipment type
-	//     matches the swapped slots equipment types.
-    else if (isOriginEquipSlot && isTargetEquipSlot)
-    {
-	    // Target slot does NOT accept origin item's equipment requirements
-    	if (!OriginItem->GetValidEquipmentSlots().HasTag(TargetSlot.EquipmentTag))
-    	{
-    		UE_LOGFMT(LogTemp, Log,
-				"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - "
-				"Destination Slot ({SlotNum}) is not a valid equipment slot for origin item.",
-				GetName(), HasAuthority()?"SRV":"CLI", TargetSlot.SlotNumber);
-    		return false;
-    	}
-    	
-    	// Origin slot does NOT accept target item's equipment requirements
-    	if (!TargetItem->GetValidEquipmentSlots().HasTag(OriginSlot.EquipmentTag))
-    	{
-    		UE_LOGFMT(LogTemp, Log,
-				"{Inventory}({Sv}): SwapOrStackWithRemainder() Failed - "
-				"Destination Slot ({SlotNum}) is not a valid equipment slot for origin item.",
-				GetName(), HasAuthority()?"SRV":"CLI", TargetSlot.SlotNumber);
-    		return false;
-    	}
-    }//if both slots are not non-equipment^
-	
+	/**
+	 * Validates like-items
+	 */
 	const bool	isSameExactItem = TargetSlot.ContainsItem(*OriginItem, true);
 	const int   MaxStackSize	= TargetItem->GetMaxStackSize();
 
