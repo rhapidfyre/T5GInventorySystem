@@ -18,15 +18,17 @@ public:
 	
 	UInventorySave() {};
 
+	/*
 	UFUNCTION(BlueprintPure)
 	TArray<FStInventorySlot> LoadInventorySlots();
 
 	UFUNCTION(BlueprintCallable)
-	void SaveInventorySlots(const TArray<FStInventorySlot> ArrayOfCopiedSlots);
+	void SaveInventorySlots(TArray<FStInventorySlot> ArrayOfCopiedSlots);
 
 
 private:
-
-	UPROPERTY(SaveGame) TArray<FStInventorySlot> InventorySlots_ = {};
+*/
+	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite)
+	TArray<FStInventorySlot> SavedInventorySlots = {};
 	
 };

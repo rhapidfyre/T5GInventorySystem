@@ -1,8 +1,6 @@
 ﻿
 #include "lib/InventorySlot.h"
 #include "lib/ItemData.h"
-#include "Logging/StructuredLog.h"
-
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory,					"Inventory");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_Slot,				"Inventory.SlotType");
@@ -15,7 +13,7 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Inventory_Slot_Hidden,		"Inventory.SlotType.Hidden");
 
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment,					"Equipment");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot,				"Equipment.SlotType");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Uninit,		"Inventory.SlotType.Uninitialized");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Uninit,		"Equipment.SlotType.Uninitialized");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Primary,		"Equipment.SlotType.Primary");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Secondary,	"Equipment.SlotType.Secondary");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Ranged,		"Equipment.SlotType.Ranged");
@@ -27,6 +25,8 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Torso,		"Equipment.SlotType.Torso");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Shoulders,	"Equipment.SlotType.Shoulders");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Arms,			"Equipment.SlotType.Arms");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Wrists,		"Equipment.SlotType.Wrist");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Wrists_Left,	"Equipment.SlotType.Wrist.Left");
+UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Wrists_Right,	"Equipment.SlotType.Wrist.Right");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Ring,			"Equipment.SlotType.Ring");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Ring_Left,	"Equipment.SlotType.Ring.Left");
 UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Ring_Right,	"Equipment.SlotType.Ring.Right");
@@ -39,16 +39,16 @@ UE_DEFINE_GAMEPLAY_TAG(TAG_Equipment_Slot_Feet,			"Equipment.SlotType.Feet");
 // Generic Constructor for initializing an un-usable inventory slot
 FStInventorySlot::FStInventorySlot()
 {
-	
+	this->LastUpdate = FDateTime::UtcNow().ToUnixTimestamp();
 }
 
 
-FStInventorySlot::FStInventorySlot(const FGameplayTag& InvSlotType)
+FStInventorySlot::FStInventorySlot(const FGameplayTag& InvSlotType) : FStInventorySlot()
 {
 	SetAsEquipmentSlot(InvSlotType);
 }
 
-FStInventorySlot::FStInventorySlot(const FStItemData& ItemReference)
+FStInventorySlot::FStInventorySlot(const FStItemData& ItemReference) : FStInventorySlot()
 {
 	if (ItemReference.GetIsValidItem())
 	{
@@ -57,7 +57,7 @@ FStInventorySlot::FStInventorySlot(const FStItemData& ItemReference)
 }
 
 // For initializing with an item in it
-FStInventorySlot::FStInventorySlot(const UItemDataAsset* ItemDataAsset, int OrderQuantity)
+FStInventorySlot::FStInventorySlot(const UItemDataAsset* ItemDataAsset, int OrderQuantity) : FStInventorySlot()
 {
 	if (IsValid(ItemDataAsset))
 	{
@@ -115,16 +115,20 @@ FGameplayTag FStInventorySlot::GetEquipmentTag() const
 void FStInventorySlot::DamageDurability(float DamageAmount)
 {
 	SlotItemData.DamageItem(DamageAmount);
+	this->LastUpdate = FDateTime::UtcNow().ToUnixTimestamp();
 }
 
 void FStInventorySlot::RepairDurability(float RepairAmount)
 {
 	SlotItemData.RepairItem(RepairAmount);
+	this->LastUpdate = FDateTime::UtcNow().ToUnixTimestamp();
 }
 
 bool FStInventorySlot::SetQuantity(int NewQuantity)
 {
-	return SlotItemData.SetItemQuantity(NewQuantity);
+	const bool bSuccessful = SlotItemData.SetItemQuantity(NewQuantity);
+	this->LastUpdate = FDateTime::UtcNow().ToUnixTimestamp();
+	return bSuccessful;
 }
 
 
@@ -135,7 +139,12 @@ bool FStInventorySlot::SetQuantity(int NewQuantity)
  */
 int FStInventorySlot::IncreaseQuantity(int OrderQuantity)
 {
-	if (!ContainsValidItem()) { return SlotItemData.IncreaseQuantity(OrderQuantity); }
+	if (ContainsValidItem())
+	{
+		const int itemsAdded = SlotItemData.IncreaseQuantity(OrderQuantity);
+		this->LastUpdate = FDateTime::UtcNow().ToUnixTimestamp();
+		return itemsAdded;
+	}
 	return 0;
 }
 
@@ -146,13 +155,21 @@ int FStInventorySlot::IncreaseQuantity(int OrderQuantity)
  */
 int FStInventorySlot::DecreaseQuantity(int OrderQuantity)
 {
-	if (!ContainsValidItem()) { return SlotItemData.DecreaseQuantity(OrderQuantity); }
+	if (ContainsValidItem())
+	{
+		const int itemsRemoved = SlotItemData.DecreaseQuantity(OrderQuantity);
+		this->LastUpdate = FDateTime::UtcNow().ToUnixTimestamp();
+		return itemsRemoved;
+	}
 	return 0;
 }
 
 int FStInventorySlot::GetQuantity() const
 {
-	if (ContainsValidItem()) { return SlotItemData.ItemQuantity;}
+	if (ContainsValidItem())
+	{
+		return SlotItemData.ItemQuantity;
+	}
 	return 0;
 }
 
@@ -220,7 +237,11 @@ bool FStInventorySlot::ContainsItem(const FStItemData& ItemData, const bool bExa
 void FStInventorySlot::EmptyAndResetSlot()
 {
 	SlotItemData.DestroyItem();
-	if (OnSlotUpdated.IsBound()) {OnSlotUpdated.Broadcast(this->SlotNumber);}
+	this->LastUpdate = FDateTime::UtcNow().ToUnixTimestamp();
+	if (OnSlotUpdated.IsBound())
+	{
+		OnSlotUpdated.Broadcast(this->SlotNumber);
+	}
 }
 
 int FStInventorySlot::GetMaxStackAllowance() const
@@ -234,5 +255,6 @@ void FStInventorySlot::Activate()
 {
 	if (!ContainsValidItem())	{ OnSlotActivated.Broadcast(SlotNumber); }
 	else						{ SlotItemData.ActivateItem(false); };
+	this->LastUpdate = FDateTime::UtcNow().ToUnixTimestamp();
 }
 

@@ -51,6 +51,11 @@ int UPrimaryItemDataAsset::GetItemMaxStackSize() const
 	return MaxStackSize > 0 ? MaxStackSize : 1;
 }
 
+bool UPrimaryItemDataAsset::GetItemCanStack() const
+{
+	return GetItemMaxStackSize() > 1;
+}
+
 float UPrimaryItemDataAsset::GetItemCarryWeight() const
 {
 	return CarryWeight >= 0.f ? CarryWeight : 0.0;
@@ -76,9 +81,20 @@ FString UPrimaryItemDataAsset::GetItemDescription() const
 	return ItemDescription;
 }
 
+/* Returns a random rarity from the items possible rarity categories.
+ * If the item has no rarities defined, it will return "Common"
+ */
 FGameplayTag UPrimaryItemDataAsset::GetItemRarity() const
 {
-	if (ItemRarity.IsValid()) { return ItemRarity; }
+	if (ItemRarity.IsValid())
+	{
+		TArray AllRarityTags = ItemRarity.GetGameplayTagArray();
+		if (AllRarityTags.Num() > 0)
+		{
+			return AllRarityTags[ FMath::RandRange(0, ItemRarity.Num()-1) ];
+		}
+		return TAG_Item_Rarity_Common;
+	}
 	return TAG_Item_Rarity_Trash.GetTag();
 }
 
@@ -140,12 +156,19 @@ FGameplayTagContainer UPrimaryItemDataAsset::GetItemCategories() const
 	return ItemCategories;
 }
 
+/* Returns an array of all possible rarities. If no rarities are specified,
+ * this will return an array with just the "Common" rarity.
+ */
+FGameplayTagContainer UPrimaryItemDataAsset::GetItemRarities() const
+{
+	return ItemRarity.Num() > 0 ? ItemRarity : FGameplayTagContainer(TAG_Item_Rarity_Common);
+}
+
 
 FStItemData::FStItemData() :
 	ItemQuantity(0),
 	DurabilityNow(-1.f),
-	Rarity(TAG_Item_Rarity_Common.GetTag()),
-	Data(nullptr)
+	Rarity(TAG_Item_Rarity_Common.GetTag())
 {}
 
 /**
@@ -175,13 +198,17 @@ FStItemData::FStItemData(const UItemDataAsset* NewData, const int OrderQuantity)
  */
 FStItemData::FStItemData(const FStItemData& OldItem, int OverrideQuantity)
 {
-	if (IsValid(OldItem.Data))
+	if (OldItem.GetIsValidItem())
 	{
-		if (OverrideQuantity > 0)	{ItemQuantity = OverrideQuantity;}
-		else						{ItemQuantity = OldItem.ItemQuantity;}
-		DurabilityNow	= OldItem.Data->GetItemMaxDurability();
-		Rarity			= OldItem.Data->GetItemRarity();
-		Data			= OldItem.Data->CopyAsset();
+		if (IsValid(OldItem.Data))
+		{
+			if (OverrideQuantity > 0)	{ItemQuantity = OverrideQuantity;}
+			else						{ItemQuantity = OldItem.ItemQuantity;}
+			DurabilityNow	= OldItem.Data->GetItemMaxDurability();
+			Rarity			= OldItem.Data->GetItemRarity();
+			Data			= OldItem.Data->CopyAsset();
+			return;
+		}
 	}
 }
 
@@ -199,7 +226,9 @@ FGameplayTagContainer FStItemData::GetValidEquipmentSlots() const
 		// Is an equipment tag
 		if ( GetIsValidEquipmentItem() )
 		{
-			return GetValidEquipmentSlots();
+			FGameplayTagContainer TagOptions;
+			Data->GetItemTagOptions(TagOptions);
+			return TagOptions;
 		}
 	}
 	return {};
@@ -415,6 +444,16 @@ bool FStItemData::ActivateItem(bool bForceConsume)
 	return false;
 }
 
+bool FStItemData::GetIsValidItem() const
+{
+	if (IsValid(Data))
+	{
+		const int iQuantity = ItemQuantity;
+		return iQuantity > 0;
+	}
+	return false;
+}
+
 /**
  * Checks if the reference item and this item have the same data asset.
  * Does not account for meta data, such as durability. Use IsExactSameItem().
@@ -452,6 +491,19 @@ bool FStItemData::GetIsValidEquipmentItem() const
 		FGameplayTagContainer TagContainer;
 		Data->GetItemTagOptions(TagContainer);
 		return TagContainer.HasTag(TAG_Item_Equipment);
+	}
+	return false;
+}
+
+bool FStItemData::GetIsValidFitToSlot(const FGameplayTag& SlotTag) const
+{
+	if (GetIsValidItem())
+	{
+		const UEquipmentItemData* EquipmentData = Cast<UEquipmentItemData>( Data );
+		if (IsValid(EquipmentData))
+		{
+			return EquipmentData->EquippableSlots.HasTag(SlotTag);
+		}
 	}
 	return false;
 }

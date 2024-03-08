@@ -33,6 +33,9 @@ public:
 	}
 
 	virtual void GetItemTagOptions(FGameplayTagContainer& TagOptions) const override;
+
+	// If true, the equipment will start equipped (donned/armed)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bStartEquipped = false;
 	
 	// The mesh worn by typically masculine wearers. This is the default if feminine is nullptr.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)	USkeletalMesh* MeshMasculine = nullptr;
@@ -40,10 +43,13 @@ public:
 	// The mesh used by typically feminine wearers.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)	USkeletalMesh* MeshFeminine  = nullptr;
 	
-	// What body part this mesh is associated with (body part "slot")
+	// Which equipment slots this item can occupy (Equipment.Slot.Torso)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTagContainer EquippableSlots = {};
 	
-	// Which part parts will be hidden if this mesh is equipped. Overridden by "ShowsBodyParts"
+	// What body part this mesh is associated with (Character.Body.Torso)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTagContainer RelatedBodyPartTag = {};
+	
+	// Which body parts will be hidden if this mesh is equipped. Overridden by "ShowsBodyParts"
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTagContainer HidesBodyParts = {};
 	
 	// Which body parts MUST be visible if this mesh is equipped. Overrules "ShowsBodyParts".

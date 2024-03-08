@@ -50,28 +50,34 @@ TArray<FStItemData> UInventoryDataAsset::GetStartingItems() const
 	TArray<FStItemData> stStartingItems = {};
 	if (StartingItems.Num() > 0)
 	{
-		for (UStartingItemData* startItem : StartingItems)
+		for (FStartingItem startItem : StartingItems)
 		{
-			const int itemQuantity = !startItem->bRandomQuantity
-				? 1 : DetermineQuantity(startItem->QuantityMinimum, startItem->QuantityMaximum);
-			
-			double rollResult, winChance;
-			const bool winningRoll = RollTheDice(
-					rollResult, winChance,
-					startItem->ChanceMinimum,
-					startItem->ChanceMaximum);
-			
-			UE_LOGFMT(LogTemp, Display, "GetStartingItems(): "
-				"Rolled '{DieRoll}', Needed <= {WinChance}", rollResult, winChance);
-			
-			if (winningRoll)
+			// Continue iterating if the reference is invalid
+			if (!IsValid(startItem.ItemReference)) { continue; }
+
+			const int validatedQuantity = startItem.QuantityMaximum > 0 ? startItem.QuantityMaximum : 1;
+			const int itemQuantity = !startItem.bRandomQuantity
+				? validatedQuantity : DetermineQuantity(startItem.QuantityMinimum, startItem.QuantityMaximum);
+
+			for (int i = 0; i < itemQuantity; i++)
 			{
-				FStItemData NewItem(startItem);
-				NewItem.DurabilityNow = startItem->GetItemMaxDurability();
-				NewItem.bIsEquipped   = startItem->bEquipOnStart;
-				stStartingItems.Add(startItem);
-			}
+				double rollResult, winChance;
+				const bool winningRoll = RollTheDice(
+						rollResult, winChance,
+						startItem.ChanceMinimum,
+						startItem.ChanceMaximum);
 			
+				UE_LOGFMT(LogTemp, Display, "GetStartingItems(): "
+					"Rolled '{DieRoll}', Needed <= {WinChance}", rollResult, winChance);
+			
+				if (winningRoll)
+				{
+					FStItemData NewItem(startItem.ItemReference);
+					NewItem.DurabilityNow = startItem.ItemReference->GetItemMaxDurability();
+					NewItem.bIsEquipped   = startItem.bEquipOnStart;
+					stStartingItems.Add(NewItem);
+				}
+			}
 		}
 	}
 	return stStartingItems;

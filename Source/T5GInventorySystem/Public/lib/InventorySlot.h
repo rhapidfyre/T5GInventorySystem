@@ -6,6 +6,7 @@
 
 #include "InventorySlot.generated.h"
 
+class UInventoryComponent;
 
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Inventory);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Inventory_Slot);
@@ -30,6 +31,8 @@ UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Torso);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Shoulders);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Arms);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Wrists);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Wrists_Left);
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Wrists_Right);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Ring);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Ring_Left);
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Ring_Right);
@@ -87,9 +90,26 @@ struct T5GINVENTORYSYSTEM_API FStInventorySlot
 	bool 		 ContainsItem(
 					const FStItemData& ItemData, const bool bExact = false) const;
 
-	int64 LastUpdate = FDateTime::UtcNow().ToUnixTimestamp();
+	int64 LastUpdate = 0;
 
-	UPROPERTY() class UInventoryComponent* ParentInventory = nullptr;
+	bool operator==(const FStInventorySlot& ComparisonSlot) const
+	{
+		if (ParentInventory != nullptr)					{ return false; }
+		if (ComparisonSlot.ParentInventory != nullptr)	{ return false; }
+		if (ComparisonSlot.ParentInventory == ParentInventory)
+		{
+			if (ComparisonSlot.SlotNumber  == SlotNumber)
+			{
+				if (ComparisonSlot.SlotTag == SlotTag)
+				{
+					return (ComparisonSlot.SlotItemData == SlotItemData);
+				}
+			}
+		}
+		return false;
+	}
+
+	UPROPERTY() UInventoryComponent* ParentInventory = nullptr;
 	
 	// The proper item information for the item that is "in" this slot
 	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) FStItemData SlotItemData;

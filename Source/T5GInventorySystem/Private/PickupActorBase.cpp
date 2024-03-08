@@ -23,7 +23,6 @@ APickupActorBase::APickupActorBase()
 	PickUpDetection->SetSphereRadius(48.0);
 	
 	SetMobility(EComponentMobility::Movable);
-	
 }
 
 // base Unreal Engine AActor* override for replication
@@ -57,7 +56,10 @@ void APickupActorBase::Tick(float DeltaTime)
 void APickupActorBase::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	if (HasAuthority()) { WorldTransform_ = GetActorTransform(); }
+	if (HasAuthority())
+	{
+		WorldTransform_ = GetActorTransform();
+	}
 	SetupItemData();
 }
 
@@ -92,7 +94,7 @@ void APickupActorBase::BeginPlay()
 	{
 		sMesh->SetSimulatePhysics(HasAuthority());
 		sMesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-		sMesh->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
+		sMesh->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Overlap);
 		sMesh->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 		sMesh->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
 		sMesh->SetCollisionResponseToChannel(ECC_EngineTraceChannel3, ECR_Ignore);
@@ -120,9 +122,15 @@ void APickupActorBase::SetupItemData()
 {
 	UStaticMeshComponent* sMesh = GetStaticMeshComponent();
 
-	if (!ItemData.GetIsValidItem())
+	if (ItemData.GetIsValidItem())
 	{
-		sMesh->SetStaticMesh(ItemData.Data->GetItemStaticMesh());
+		if (IsValid(ItemData.Data))
+		{
+			if (IsValid( ItemData.Data->GetItemStaticMesh()) )
+			{
+				sMesh->SetStaticMesh( ItemData.Data->GetItemStaticMesh() );
+			}
+		}
 	}
 	
 	sMesh->SetCollisionObjectType(ECC_PhysicsBody);

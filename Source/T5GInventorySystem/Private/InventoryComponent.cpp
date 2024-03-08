@@ -19,7 +19,8 @@ void UInventoryComponent::Helper_SaveInventory(USaveGame*& SaveData) const
 	UInventorySave* InventorySave = Cast<UInventorySave>( SaveData );
 	if (IsValid(SaveData))
 	{
-		InventorySave->SaveInventorySlots(InventorySlots_);
+		//InventorySave->SaveInventorySlots(InventorySlots_);
+		InventorySave->SavedInventorySlots = InventorySlots_;
 	}
 }
 
@@ -33,11 +34,6 @@ void UInventoryComponent::BeginPlay()
 
 UInventoryComponent::UInventoryComponent()
 {
-	
-#ifdef UE_BUILD_DEBUG
-	bShowDebug = true;
-#endif
-	
     PrimaryComponentTick.bCanEverTick = false;
     SetIsReplicatedByDefault(true);
 }
@@ -97,14 +93,27 @@ void UInventoryComponent::ReinitializeInventory()
 			// Adds the equipment slots to the end of the inventory
 			for (const FGameplayTag& NewEquipmentTag : InventoryDataAsset->EquipmentSlots)
 			{
-				FStInventorySlot NewInventorySlot;
-				NewInventorySlot.SlotTag		 = DefaultEquipmentTag;
-				NewInventorySlot.EquipmentTag	 = NewEquipmentTag;
-				NewInventorySlot.ParentInventory = this;
-				NewInventorySlot.SlotNumber		 = SlotNumber;
-				NewInventorySlot.OnSlotUpdated.AddUObject(   this, &UInventoryComponent::SlotUpdated   );
+				// Create the slot
+				FStInventorySlot NewEquipmentSlot;
+				NewEquipmentSlot.SlotTag		 = DefaultEquipmentTag;
+				NewEquipmentSlot.EquipmentTag	 = NewEquipmentTag;
+				NewEquipmentSlot.ParentInventory = this;
+				NewEquipmentSlot.SlotNumber		 = SlotNumber;
+				NewEquipmentSlot.OnSlotUpdated.AddUObject(   this, &UInventoryComponent::SlotUpdated   );
 				//NewInventorySlot.OnSlotActivated.AddUObject( this, &UInventoryComponent::SlotActivated );
-				InventorySlots_.Add(NewInventorySlot);
+				
+				InventorySlots_.Add(NewEquipmentSlot);
+				
+				// Set the O(1) variables for combat slots
+				if (NewEquipmentTag == TAG_Equipment_Slot_Primary)
+					{ PrimarySlot_  	= SlotNumber; }
+				else if (NewEquipmentTag == TAG_Equipment_Slot_Secondary)
+					{ SecondarySlot_	= SlotNumber; }
+				else if (NewEquipmentTag == TAG_Equipment_Slot_Ranged)
+					{ RangedSlot_		= SlotNumber; }
+				else if (NewEquipmentTag == TAG_Equipment_Slot_Ammunition)
+					{ AmmunitionSlot_	= SlotNumber; }
+				
 				SlotNumber++;
 			}
 		}
@@ -134,7 +143,8 @@ void UInventoryComponent::IssueStartingItems()
 
 			// Create a pseudo slot so the item is added as it was generated
 			//   (AddItemFromDataAsset will create a whole new item)
-			const FStInventorySlot PseudoSlot = FStInventorySlot(NewItem);
+			FStInventorySlot PseudoSlot = FStInventorySlot(NewItem);
+			PseudoSlot.ParentInventory = this;
 			
 			if (StartingItem.bIsEquipped)
 			{
@@ -152,7 +162,8 @@ void UInventoryComponent::IssueStartingItems()
 				if (SlotNumber >= 0)
 				{
 					const int itemsAdded = AddItem(
-						PseudoSlot, NewItem.ItemQuantity, SlotNumber, false, false, false);
+						PseudoSlot, NewItem.ItemQuantity, SlotNumber,
+						false, false, false);
 
 					if (itemsAdded > 0)
 					{
@@ -172,14 +183,14 @@ void UInventoryComponent::IssueStartingItems()
 			if (itemsAdded > 0)
 			{
 				UE_LOGFMT(LogTemp, Display,
-					"{InvName}({Server})}: x{Amount} of '{ItemName}' Added to Slot #{SlotNum}",
+					"{InvName}({Server}): x{Amount} of '{ItemName}' Added to Slot #{SlotNum}",
 					GetName(), HasAuthority()?"SRV":"CLI", itemsAdded,
 					NewItem.Data->GetItemDisplayNameAsString(), SlotNumber);
 			}
 			else
 			{
 				UE_LOGFMT(LogTemp, Warning,
-					"{InvName}({Server})}: Starting Item '{ItemName}' failed to add",
+					"{InvName}({Server}): Starting Item '{ItemName}' failed to add",
 					GetName(), HasAuthority()?"SRV":"CLI", NewItem.Data->GetItemDisplayNameAsString());
 			}
 			
@@ -198,7 +209,7 @@ bool UInventoryComponent::GetCanPickUpItems() const
 
 void UInventoryComponent::Client_InventoryRestored_Implementation()
 {
-	OnInventoryRestored.Broadcast(true);
+	if (OnInventoryRestored.IsBound()) { OnInventoryRestored.Broadcast(true); }
 }
 
 /**
@@ -209,6 +220,7 @@ void UInventoryComponent::Client_InventoryRestored_Implementation()
 void UInventoryComponent::RestoreInventory(
 	const TArray<FStInventorySlot>& RestoredInventory)
 {
+	/*
 	const bool doServerSave =	HasAuthority() &&   bSavesOnServer;
 	const bool doClientSave = ! HasAuthority() && ! bSavesOnServer;
 	if ( !doServerSave || !doClientSave || bInventoryRestored)
@@ -219,12 +231,14 @@ void UInventoryComponent::RestoreInventory(
 			return;
 		}
 	}
-
+	*/
+	
 	{
 		FRWScopeLock WriteLock(InventoryMutex, SLT_Write);
 		bInventoryReady = false;
 	
-		InventorySlots_.Empty( RestoredInventory.Num() );
+		InventorySlots_.Empty(RestoredInventory.Num());
+		
 		for (int i = 0; i < RestoredInventory.Num(); i++)
 		{
 			FStInventorySlot NewSlot(RestoredInventory[i]);
@@ -248,7 +262,7 @@ void UInventoryComponent::RestoreInventory(
 	if (HasAuthority())
 	{
 		bInventoryRestored = true;
-		OnInventoryRestored.Broadcast(true);
+		if (OnInventoryRestored.IsBound()) { OnInventoryRestored.Broadcast(true); }
 		Client_InventoryRestored();
 	}
 	
@@ -303,7 +317,7 @@ FString UInventoryComponent::SaveInventory(FString& responseStr, bool isAsync)
 			}
 		}
 		// Loop until a unique save string has been created
-		while (UGameplayStatics::DoesSaveGameExist(TempSaveName, 0));
+		while (UGameplayStatics::DoesSaveGameExist(SaveFolder + TempSaveName, 0));
 		SaveSlotName_ = TempSaveName;
 	}
 
@@ -313,40 +327,30 @@ FString UInventoryComponent::SaveInventory(FString& responseStr, bool isAsync)
 		responseStr = "Failed to Generate Unique SaveSlotName";
 		return FString();
 	}
-
-	if (isAsync)
-	{
-		FAsyncLoadGameFromSlotDelegate SaveDelegate;
-		SaveDelegate.BindUObject(this, &UInventoryComponent::SaveInventoryDelegate);
-		UGameplayStatics::AsyncLoadGameFromSlot(SaveSlotName_, 0, SaveDelegate);
-		responseStr = "Sent Request for Async Save";
-		return SaveSlotName_;
-	}
-
-	USaveGame* SaveData;
-	if (UGameplayStatics::DoesSaveGameExist(SaveSlotName_, 0))
-	{
-		SaveData = UGameplayStatics::LoadGameFromSlot(SaveSlotName_, 0);
-	}
-	else
-	{
-		// If this is a brand new inventory save, issue the starting items.
-		IssueStartingItems();
-		SaveData = UGameplayStatics::CreateSaveGameObject( UInventorySave::StaticClass() );
-		if (!IsValid(SaveData))
-		{
-			responseStr = "Failed to Create New Save Object";
-			return FString();
-		}
-	}
 		
+	USaveGame* SaveData = UGameplayStatics::CreateSaveGameObject( UInventorySave::StaticClass() );
+	if (!IsValid(SaveData))
+	{
+		responseStr = "Failed to Create New Save Object";
+		return FString();
+	}
 	UInventorySave* InventorySave = Cast<UInventorySave>(SaveData);
+	
 	if (IsValid(InventorySave))
 	{
-		
-		if (UGameplayStatics::SaveGameToSlot(InventorySave, SaveSlotName_, 0))
+		Helper_SaveInventory(SaveData);
+
+		if (isAsync)
 		{
-			Helper_SaveInventory(SaveData);
+			FAsyncSaveGameToSlotDelegate SaveDelegate;
+			SaveDelegate.BindUObject(this, &UInventoryComponent::SaveInventoryDelegate);
+			UGameplayStatics::AsyncSaveGameToSlot(InventorySave, SaveFolder + SaveSlotName_, 0, SaveDelegate);
+			responseStr = "Sent Request for Async Save";
+			return SaveSlotName_;
+		}
+		
+		if (UGameplayStatics::SaveGameToSlot(InventorySave, SaveFolder + SaveSlotName_, SaveUserIndex_))
+		{
 			responseStr = "Successful Synchronous Save";
 			UE_LOGFMT(LogTemp, Log, "{InventoryName}({Sv}): "
 				"Successfully Saved Inventory '{InventorySave} ({OwnerName})",
@@ -363,6 +367,25 @@ FString UInventoryComponent::GetInventorySaveName() const
 	return DoesInventorySaveExist() ? SaveSlotName_ : "";
 }
 
+/**
+ * Checks if the incoming slot is the exact same slot as the reference slot
+ * @param ComparisonSlot The slot to compare to this inventory slot
+ * @param SlotNumber The slot number of the slot for this inventory
+ * @return True if the slots are the same slot (identical)
+ */
+bool UInventoryComponent::CheckIfSameSlot(const FStInventorySlot& ComparisonSlot, const int SlotNumber) const
+{
+	if (IsValid(ComparisonSlot.ParentInventory) && ComparisonSlot.SlotNumber >= 0)
+	{
+		const FStInventorySlot SlotCopy = GetCopyOfSlotNumber(SlotNumber);
+		if (IsValid(SlotCopy.ParentInventory) && SlotCopy.SlotNumber >= 0)
+		{
+			return SlotCopy == ComparisonSlot;
+		}
+	}
+	return false;
+}
+
 
 /** @brief Loads the requested save slot name, populating the inventory with
  * any data found in a save file with the given name.
@@ -373,12 +396,11 @@ FString UInventoryComponent::GetInventorySaveName() const
  * @return Returns true on success or async run, false on failure.
  */
 bool UInventoryComponent::LoadInventory(
-		FString& responseStr, FString SaveSlotName, bool isAsync)
+		FString& responseStr, FString SaveSlotName, int32 SaveUserIndex, bool isAsync)
 {
-	responseStr = "Failed to Save (Inventory Has Not Initialized)";
-	const bool doServerSave =	(HasAuthority() &&   bSavesOnServer);
-	const bool doClientSave = ! HasAuthority() && ! bSavesOnServer;
-	if ( !doServerSave || !doClientSave || bInventoryRestored)
+	responseStr = "Failed to Load (Inventory Has Not Initialized)";
+	const bool bHasAuthority = HasAuthority();
+	if ( bHasAuthority && !bSavesOnServer )
 	{
 		// Always allow save if this client is the listen server or standalone
 		const ENetMode netMode = GetNetMode();
@@ -388,10 +410,15 @@ bool UInventoryComponent::LoadInventory(
 			return false;
 		}
 	}
+	if ( !bHasAuthority && bSavesOnServer )
+	{
+		responseStr = "Authority Violation when Loading Inventory '"+SaveSlotName+"'";
+		return false;
+	}
 	
 	if (bInventoryReady)
 	{
-		if (!UGameplayStatics::DoesSaveGameExist(SaveSlotName, SaveUserIndex_))
+		if (!UGameplayStatics::DoesSaveGameExist(SaveFolder + SaveSlotName, SaveUserIndex_))
 		{
 			responseStr = "No SaveSlotName Exists";
 			return false;
@@ -402,13 +429,13 @@ bool UInventoryComponent::LoadInventory(
 		{
 			FAsyncLoadGameFromSlotDelegate LoadDelegate;
 			LoadDelegate.BindUObject(this, &UInventoryComponent::LoadDataDelegate);
-			UGameplayStatics::AsyncLoadGameFromSlot(SaveSlotName_, SaveUserIndex_, LoadDelegate);
-			responseStr = "Sent Async Save Request";
+			UGameplayStatics::AsyncLoadGameFromSlot(SaveFolder + SaveSlotName_, SaveUserIndex_, LoadDelegate);
+			responseStr = "Sent Async Load Request";
 			return true;
 		}
 
 		LoadDataDelegate(SaveSlotName_, SaveUserIndex_, nullptr);
-		return UGameplayStatics::DoesSaveGameExist(SaveSlotName_, SaveUserIndex_);
+		return UGameplayStatics::DoesSaveGameExist(SaveFolder + SaveSlotName_, SaveUserIndex_);
 	}
 	return false;
 }
@@ -442,8 +469,6 @@ int UInventoryComponent::GetNumberOfEquipmentSlots() const
  */
 FGameplayTag UInventoryComponent::GetSlotInventoryTag(int SlotNumber) const
 {
-	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): GetSlotTypeInventory({SlotNum})",
-		GetName(), HasAuthority()?"SRV":"CLI", SlotNumber);
 	return GetCopyOfSlotNumber(SlotNumber).SlotTag;
 }
 
@@ -455,8 +480,6 @@ FGameplayTag UInventoryComponent::GetSlotInventoryTag(int SlotNumber) const
  */
 FGameplayTag UInventoryComponent::GetSlotEquipmentTag(int SlotNumber) const
 {
-	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): GetSlotTypeEquipment({SlotNum})",
-		GetName(), HasAuthority()?"SRV":"CLI", SlotNumber);
 	return GetCopyOfSlotNumber(SlotNumber).EquipmentTag;
 }
 
@@ -492,12 +515,12 @@ int UInventoryComponent::GetFirstEmptySlotNumber() const
         if (InventorySlot.IsSlotEmpty())
         {
         	UE_LOGFMT(LogTemp, Display, "GetFirstEmptySlotNumber({Sv}): Empty {SlotType} Found @ {SlotNum}",
-				HasAuthority()?"SRV":"CLI", HasAuthority()?"SRV":"CLI", InventorySlot.SlotNumber);
+				HasAuthority()?"SRV":"CLI", InventorySlot.SlotTag.GetTagName(), InventorySlot.SlotNumber);
 	        return InventorySlot.SlotNumber;
         }
     }
-	UE_LOGFMT(LogTemp, Display, "GetFirstEmptySlotNumber({Sv}): No Empty {SlotType} Found",
-		HasAuthority()?"SRV":"CLI", HasAuthority()?"SRV":"CLI");
+	UE_LOGFMT(LogTemp, Display, "GetFirstEmptySlotNumber({Sv}): No Empty Slot Found",
+		HasAuthority()?"SRV":"CLI");
     return -1;
 }
 
@@ -599,14 +622,36 @@ TArray<FStInventorySlot> UInventoryComponent::GetCopyOfAllSlots() const
 
 TArray<FStInventorySlot> UInventoryComponent::GetCopyOfAllInventorySlots() const
 {
-	// TODO
-	return {};
+	TArray<FStInventorySlot> RetArray;
+	// No mutex is needed; The inventory will never get smaller unless it's resetting
+	for (int i = 0; i < InventorySlots_.Num(); i++)
+	{
+		if (InventorySlots_.IsValidIndex(i))
+		{
+			if (InventorySlots_[i].SlotTag == TAG_Inventory_Slot_Generic)
+			{
+				RetArray.Add(InventorySlots_[i]);
+			}
+		}
+	}
+	return RetArray;
 }
 
 TArray<FStInventorySlot> UInventoryComponent::GetCopyOfAllEquipmentSlots() const
 {
-	// TODO
-	return {};
+	TArray<FStInventorySlot> RetArray;
+	// No mutex is needed; The inventory will never get smaller unless it's resetting
+	for (int i = 0; i < InventorySlots_.Num(); i++)
+	{
+		if (InventorySlots_.IsValidIndex(i))
+		{
+			if (InventorySlots_[i].SlotTag == TAG_Inventory_Slot_Equipment)
+			{
+				RetArray.Add(InventorySlots_[i]);
+			}
+		}
+	}
+	return RetArray;
 }
 
 /**
@@ -617,8 +662,6 @@ FStInventorySlot* UInventoryComponent::GetSlotReference(int SlotNumber)
 {
     if (IsValidSlotNumber(SlotNumber))
     {
-    	UE_LOGFMT(LogTemp, Display, "{Inventory}({Sv}): GetSlot({SlotNum}) executed Successfully",
-			GetName(), HasAuthority()?"SRV":"CLI", SlotNumber);
     	return &InventorySlots_[SlotNumber];
     }
 	return nullptr;
@@ -626,7 +669,7 @@ FStInventorySlot* UInventoryComponent::GetSlotReference(int SlotNumber)
 
 void UInventoryComponent::SlotUpdated(const int SlotNumber)
 {
-	OnInventoryUpdated.Broadcast(SlotNumber);
+	if (OnInventoryUpdated.IsBound()) { OnInventoryUpdated.Broadcast(SlotNumber); }
 }
 
 /**
@@ -661,6 +704,27 @@ int UInventoryComponent::GetSlotNumberByTag(const FGameplayTag& SlotTag)
     return -1;
 }
 
+FStItemData UInventoryComponent::GetItemInSlot(int SlotNumber) const
+{
+	if (IsValidSlotNumber(SlotNumber))
+	{
+		if (IsValidItemInSlot(SlotNumber))
+		{
+			return GetCopyOfSlotNumber(SlotNumber).SlotItemData;
+		}
+	}
+	return FStItemData();
+}
+
+bool UInventoryComponent::IsValidItemInSlot(int SlotNumber) const
+{
+	if (IsValidSlotNumber(SlotNumber))
+	{
+		return GetCopyOfSlotNumber(SlotNumber).ContainsValidItem();
+	}
+	return false;
+}
+
 /** 
  * Returns the truth of whether the requested slot is a real slot or not.
  * @param SlotNumber An int int of the slot being requested
@@ -669,39 +733,35 @@ int UInventoryComponent::GetSlotNumberByTag(const FGameplayTag& SlotTag)
 bool UInventoryComponent::IsValidSlotNumber(int SlotNumber) const
 {
 	const bool slotValid = InventorySlots_.IsValidIndex(SlotNumber);
-	UE_LOGFMT(LogTemp, Log,
-		"{Inventory}({Sv}): Validity Check... '{SlotNumber}' {Validity}",
-		GetName(), HasAuthority()?"SRV":"CLI", SlotNumber,
-		slotValid ? "is a valid slot" : "is NOT a valid slot");
 	return slotValid;
 }
 
 /**
- * Checks if the given equipment tag is a corresponding valid inventory slot
- * @param SearchTag The equip slot tag to look for
+ * Checks if the given slot is a corresponding valid equipment slot
  * @return Truth of outcome
  */
-bool UInventoryComponent::IsValidEquipmentSlot(const FGameplayTag& SearchTag) const
+bool UInventoryComponent::IsValidEquipmentSlot(int SlotNumber) const
 {
-    for (const FStInventorySlot& InventorySlot : GetCopyOfAllInventorySlots())
-    {
-    	if (InventorySlot.EquipmentTag == SearchTag)
-    	{
-    		UE_LOGFMT(LogTemp, Display,
-				"{Inventory}({Sv}): Equipment Enum '{SlotEnum}' is a VALID Equipment Slot",
-				GetName(), HasAuthority()?"SRV":"CLI", SearchTag.ToString());
-		    return true;
-    	}
-    }
-	UE_LOGFMT(LogTemp, Display,
-		"{Inventory}({Sv}): Equipment Enum '{SlotEnum}' is NOT a valid Equipment Slot",
-		GetName(), HasAuthority()?"SRV":"CLI", SearchTag.ToString());
-    return false;
+	if (IsValidSlotNumber(SlotNumber))
+	{
+		if (GetCopyOfSlotNumber(SlotNumber).SlotTag == TAG_Inventory_Slot_Equipment)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 bool UInventoryComponent::IsValidSlotByEquipmentTag(const FGameplayTag& SearchTag) const
 {
-	// TODO
+	TArray<FStInventorySlot> SlotCopies = GetCopyOfAllInventorySlots();
+	for ( const FStInventorySlot& InventorySlot : SlotCopies )
+	{
+		if (InventorySlot.EquipmentTag == SearchTag)
+		{
+			return true;
+		}
+	}
 	return false;
 }
 
@@ -711,14 +771,10 @@ bool UInventoryComponent::IsValidSlotByEquipmentTag(const FGameplayTag& SearchTa
  * @param SlotNumber The slot number to check.
  * @return If true, the slot is vacant.
  */
-bool UInventoryComponent::IsSlotNumberEmpty(int SlotNumber) const
+bool UInventoryComponent::IsSlotEmpty(int SlotNumber) const
 {
     if (!IsValidSlotNumber(SlotNumber)) { return false; }
 	const bool isEmpty = GetQuantityOfItemsInSlotNumber(SlotNumber) < 1;
-	UE_LOGFMT(LogTemp, Display,
-		"{Inventory}({Sv}): Slot Number {SlotNum} is {EmptyStatus}",
-		GetName(), HasAuthority()?"SRV":"CLI", SlotNumber,
-		isEmpty ? "EMPTY" : "NOT Empty");
     return isEmpty;
 }
 
@@ -730,7 +786,7 @@ bool UInventoryComponent::IsSlotNumberEmpty(int SlotNumber) const
 bool UInventoryComponent::IsSlotEmptyByTag(const FGameplayTag& SearchTag)
 {
     const int SlotNumber = GetSlotNumberByTag(SearchTag);
-    return IsSlotNumberEmpty(SlotNumber);
+    return IsSlotEmpty(SlotNumber);
 }
 
 /**
@@ -742,9 +798,6 @@ int UInventoryComponent::GetQuantityOfItemsInSlotNumber(int SlotNumber) const
 {
     if (!IsValidSlotNumber(SlotNumber)) { return -1; }
     const int SlotQuantity = GetCopyOfSlotNumber(SlotNumber).GetQuantity();
-    UE_LOGFMT(LogTemp, Display,
-    	"{Inventory}({Sv}): Slot Number {SlotNum} - Quantity = {Amount}",
-    	GetName(), HasAuthority()?"SRV":"CLI", SlotNumber, SlotQuantity);
     return SlotQuantity;
 }
 
@@ -769,7 +822,10 @@ int UInventoryComponent::AddItem(const FStInventorySlot& InventorySlot,
 			GetName(), HasAuthority()?"SRV":"CLI");
 	    return -1;
     }
-    int RemainingQuantity = OrderQuantity > 0 ? OrderQuantity : 1;
+	
+	int itemsAdded = 0;
+	const int StartingQuantity = OrderQuantity > 0 ? OrderQuantity : 1;
+    int RemainingQuantity = StartingQuantity;
 
     // This is a safeguard against an infinite loop
     int LoopIterations = 0;
@@ -833,15 +889,22 @@ int UInventoryComponent::AddItem(const FStInventorySlot& InventorySlot,
         		if (ReferenceSlot->IsSlotEmpty())
         		{
         			ReferenceSlot->SlotItemData = FStItemData(InventorySlot.SlotItemData);
-        			// Manually set quantity to 0 so we don't lose the item
-        			ReferenceSlot->SlotItemData.ItemQuantity = 0;
+        			ReferenceSlot->LastUpdate = FDateTime::UtcNow().ToUnixTimestamp();
+        			itemsAdded += InventorySlot.GetQuantity();
         		}
-
-        		// Either adds all the remaining items, or adds as much as it can
-        		// Which will be deducted from RemainingQuantity for the next iteration
-        		const int itemsAdded = ReferenceSlot->IncreaseQuantity(RemainingQuantity);
-
-        		if (itemsAdded <= 0) { SlotNumber = -1; }
+				else
+				{
+					// Either adds all the remaining items, or adds as much as it can
+					// Which will be deducted from RemainingQuantity for the next iteration
+					itemsAdded += ReferenceSlot->IncreaseQuantity(RemainingQuantity);
+				}
+        		
+        		// No changes; No items were added
+        		if (itemsAdded <= 0)
+        		{
+        			SlotNumber = -1;
+        		}
+        		// Items were successfully added, or there were none to add
         		else
         		{
         			// If items are still remaining, this stack is full
@@ -905,7 +968,7 @@ int UInventoryComponent::AddItem(const FStInventorySlot& InventorySlot,
 		"{NumAdded} Added, {NumRemain} Remaining",
 		GetName(), HasAuthority()?"SRV":"CLI", OrderQuantity, OrderQuantity - RemainingQuantity, RemainingQuantity);
 	
-    return RemainingQuantity;
+    return FMath::Clamp((StartingQuantity - RemainingQuantity), 0, INT_MAX);
 
 }
 
@@ -958,8 +1021,9 @@ int UInventoryComponent::AddItemFromDataAsset(
     }
 
     // pseudo-slot to simply function operations & avoid repeated code
-    const FStInventorySlot PseudoSlot = FStInventorySlot(NewItemData);
-
+    FStInventorySlot PseudoSlot = FStInventorySlot(NewItemData);
+	PseudoSlot.ParentInventory = this;
+	
     const int ItemsAdded = AddItem(
     	PseudoSlot, QuantityToAdd, SlotNumber, bAddOverflow, bDropOverflow, bNotify);
 
@@ -991,15 +1055,45 @@ FStInventorySlot UInventoryComponent::GetCopyOfSlotNumber(int SlotNumber) const
 {
 	if (IsValidSlotNumber(SlotNumber))
 	{
-		UE_LOGFMT(LogTemp, Display,
-			"{Inventory}({Sv}): Copy of Slot Number {SlotNumber} Requested",
-			GetName(), HasAuthority()?"SRV":"CLI", SlotNumber);
 		return InventorySlots_[SlotNumber];
 	}
-	UE_LOGFMT(LogTemp, Display,
-		"{Inventory}({Sv}): Copy of Slot Number {SlotNumber} Failed - Invalid Slot",
-		GetName(), HasAuthority()?"SRV":"CLI", SlotNumber);
     return FStInventorySlot();
+}
+
+FStInventorySlot UInventoryComponent::GetPrimaryEquipmentSlot()
+{
+	if (PrimarySlot_ < 0)
+	{
+		PrimarySlot_ = GetSlotNumberByTag(TAG_Equipment_Slot_Primary.GetTag());
+	}
+	return GetCopyOfSlotNumber(PrimarySlot_);
+}
+
+FStInventorySlot UInventoryComponent::GetSecondaryEquipmentSlot()
+{
+	if (SecondarySlot_ < 0)
+	{
+		SecondarySlot_ = GetSlotNumberByTag(TAG_Equipment_Slot_Secondary.GetTag());
+	}
+	return GetCopyOfSlotNumber(SecondarySlot_);
+}
+
+FStInventorySlot UInventoryComponent::GetRangedEquipmentSlot()
+{
+	if (RangedSlot_ < 0)
+	{
+		RangedSlot_ = GetSlotNumberByTag(TAG_Equipment_Slot_Ranged.GetTag());
+	}
+	return GetCopyOfSlotNumber(RangedSlot_);
+}
+
+FStInventorySlot UInventoryComponent::GetAmmunitionEquipmentSlot()
+{
+	if (AmmunitionSlot_ < 0)
+	{
+		AmmunitionSlot_ = GetSlotNumberByTag(TAG_Equipment_Slot_Ammunition.GetTag());
+	}
+	return GetCopyOfSlotNumber(AmmunitionSlot_);
 }
 
 /**
@@ -1261,7 +1355,9 @@ int UInventoryComponent::SwapOrStackSlots(
 
 	// If they are not the same item or not stackable, swap 1-for-1
 	OriginSlot.SlotItemData = FStItemData(*TargetItem);
+	OriginSlot.LastUpdate = FDateTime::UtcNow().ToUnixTimestamp();
 	TargetSlot.SlotItemData = FStItemData(*OriginItem);
+	TargetSlot.LastUpdate = FDateTime::UtcNow().ToUnixTimestamp();
 	RemainingQuantity = 0;
 	
     UE_LOGFMT(LogTemp, Display,
@@ -1275,24 +1371,46 @@ int UInventoryComponent::SwapOrStackSlots(
 /**
  * @brief Finds which slots have changed, and sends an update event
  */
-void UInventoryComponent::OnRep_InventorySlotUpdated_Implementation(const TArray<FStInventorySlot>& OldSlot)
+void UInventoryComponent::OnRep_InventorySlotUpdated_Implementation(const TArray<FStInventorySlot>& OldSlots)
 {
-	bool wasUpdated = false;
 	for (int i = 0; i < GetNumberOfTotalSlots(); i++)
 	{
 		// Existing slot updated
-		if (OldSlot.IsValidIndex(i))
+		if (OldSlots.IsValidIndex(i))
 		{
 			const FStInventorySlot* CurrentSlot = GetSlotReference(i);
-			const FStInventorySlot* OldSlotRef  = &OldSlot[i];
+			const FStInventorySlot* OldSlotRef  = &OldSlots[i];
 			
-			if (CurrentSlot->LastUpdate > OldSlotRef->LastUpdate)
+			const bool slotUpdated  = CurrentSlot->LastUpdate > OldSlotRef->LastUpdate;
+			const bool sameQuantity = CurrentSlot->GetQuantity() == OldSlotRef->GetQuantity(); 
+			const bool sameItem = CurrentSlot->SlotItemData.GetIsExactSameItem(OldSlotRef->SlotItemData);
+			
+			if (slotUpdated)
 			{
 				UE_LOGFMT(LogTemp, Log,
 					"{Inventory}({Sv}) REPNOTIFY: Updated Inventory Slot {SlotNum}",
 					GetName(), HasAuthority()?"SRV":"CLI", i);
-				OnInventoryUpdated.Broadcast(i);
-				wasUpdated = true;
+				if (OnInventoryUpdated.IsBound())
+				{
+					OnInventoryUpdated.Broadcast(i);
+				}
+			}
+			
+			// The item or its quantity has changed
+			else if ( !sameItem || !sameQuantity )
+			{
+				// One of the slots must have a valid item in order to be valid
+				// i.e. there was no update if the slot was empty before and after
+				if (CurrentSlot->ContainsValidItem() || OldSlotRef->ContainsValidItem())
+				{
+					UE_LOGFMT(LogTemp, Log,
+						"{Inventory}({Sv}) REPNOTIFY: Updated Inventory Slot {SlotNum}",
+						GetName(), HasAuthority()?"SRV":"CLI", i);
+					if (OnInventoryUpdated.IsBound())
+					{
+						OnInventoryUpdated.Broadcast(i);
+					}
+				}
 			}
 		}
 		
@@ -1302,15 +1420,11 @@ void UInventoryComponent::OnRep_InventorySlotUpdated_Implementation(const TArray
 			UE_LOGFMT(LogTemp, Log,
 				"{Inventory}({Sv}) REPNOTIFY: Added Inventory Slot {SlotNum}",
 				GetName(), HasAuthority()?"SRV":"CLI", i);
-			OnInventoryUpdated.Broadcast(i);
-			wasUpdated = true;
+			if (OnInventoryUpdated.IsBound())
+			{
+				OnInventoryUpdated.Broadcast(i);
+			}
 		}
-	}
-	if (!wasUpdated)
-	{
-		UE_LOGFMT(LogTemp, Warning,
-			"{Inventory}({Sv}) REPNOTIFY: Unable to ascertain which Inventory Slot was updated.",
-			GetName(), HasAuthority()?"SRV":"CLI");
 	}
 }
 
@@ -1571,50 +1685,31 @@ void UInventoryComponent::LoadDataDelegate(const FString& SaveSlotName, int32 Us
 	if (!IsValid(InventorySave))
 	{
 		InventorySave = Cast<UInventorySave>
-			( UGameplayStatics::LoadGameFromSlot(SaveSlotName_, SaveUserIndex_) );
+			( UGameplayStatics::LoadGameFromSlot(SaveFolder + SaveSlotName_, SaveUserIndex_) );
 		if (!IsValid(InventorySave))
 		{
-			OnInventoryRestored.Broadcast(false);
+			if (OnInventoryRestored.IsBound()) { OnInventoryRestored.Broadcast(false); }
 			return;
 		}
 	}
 
-	RestoreInventory( InventorySave->LoadInventorySlots() );
-	OnInventoryRestored.Broadcast(true);
+	RestoreInventory( InventorySave->SavedInventorySlots );
+	if (OnInventoryRestored.IsBound()) { OnInventoryRestored.Broadcast(true); }
 }
 
 /**
  *  Saving Delegate that is called when save data was found asynchronously
  * @param SaveSlotName The name of the save slot to be used
- * @param UserIndex Usually zero
- * @param SaveData Pointer to the save data. Invalid if it does not exist.
+ * @param UserIndex User Index
+ * @param bSuccess True if the save was successful
  */
  void UInventoryComponent::SaveInventoryDelegate(
- 		const FString& SaveSlotName, int32 UserIndex, USaveGame* SaveData)
+ 		const FString& SaveSlotName, int32 UserIndex, const bool bSuccess)
 {
-	if (!IsValid(SaveData))
-	{
-		SaveData = UGameplayStatics::CreateSaveGameObject( UInventorySave::StaticClass() );
-		if (!IsValid(SaveData))
-		{
-			UE_LOGFMT(LogTemp, Error,
-				"{Inventory}({Sv}): (Async Response) Failed to create a new inventory save object.",
-				GetName(), HasAuthority()?"SRV":"CLI", SaveSlotName, UserIndex);
-			OnInventoryRestored.Broadcast(false);
-			return;
-		}
-		UE_LOGFMT(LogTemp, Log,
-			"{Inventory}({Sv}): (Async Response) Created new Inventory Save with name '{SaveName}' @ index '{Index}'",
-			GetName(), HasAuthority()?"SRV":"CLI", SaveSlotName, UserIndex);
-	}
-	
-	Helper_SaveInventory(SaveData);
-	UGameplayStatics::SaveGameToSlot(SaveData, SaveSlotName_, SaveUserIndex_);
-
 	UE_LOGFMT(LogTemp, Log,
-		"{Inventory}({Sv}): (Async Response) Successfully saved the inventory with name '{SaveName}' @ index {Index}'",
-		GetName(), HasAuthority()?"SRV":"CLI", SaveSlotName_, SaveUserIndex_);
-	OnInventoryRestored.Broadcast(true);
+		"{Inventory}({Sv}): (Async Response) {SuccessTruth} the inventory with name '{SaveName}' @ index {Index}'",
+		GetName(), HasAuthority()?"SRV":"CLI", bSuccess?"Successfully Saved":"Failed to Save", SaveSlotName_, SaveUserIndex_);
+	if (OnInventoryRestored.IsBound()) { OnInventoryRestored.Broadcast(bSuccess); }
 }
 
 
@@ -1632,6 +1727,7 @@ void UInventoryComponent::OnRep_NewNotification_Implementation()
 
 /**
  * Sends a request to the server to transfer items between inventories.
+ * The origin item should always be where the item originated from, or started the drag operation.
  * Requires Validation. Called by the client. Executes from the player's inventory.
  * @param OriginInventory	The inventory of the FROM item (the 'origination')
  * @param TargetInventory	The inventory of the TO item (the 'receiving')
@@ -1661,7 +1757,6 @@ void UInventoryComponent::Server_TransferItems_Implementation(
 			GetName(), HasAuthority()?"SRV":"CLI");
 	    return;
     }
-
 
 	const bool ToSlotLocked		= ToSlot->SlotTag == TAG_Inventory_Slot_Locked.GetTag();
 	const bool FromSlotLocked	= ToSlot->SlotTag == TAG_Inventory_Slot_Locked.GetTag();
@@ -1701,7 +1796,8 @@ void UInventoryComponent::Server_TransferItems_Implementation(
             return;
         }
     }
-	
+
+	// Ensure the transfer is within the reach distance of the inventory
     if (OriginPlayer->GetDistanceTo(TargetPlayer) > MaxInventoryReach_)
     {
     	UE_LOGFMT(LogTemp, Error,
@@ -1710,13 +1806,27 @@ void UInventoryComponent::Server_TransferItems_Implementation(
 			OriginPlayer->GetDistanceTo(TargetPlayer), MaxInventoryReach_);
     	return;
     }
-
-	OrderQuantity = OrderQuantity > 0 ? OrderQuantity : 1;
         
-    // Make a copy of the origin item, and decrease it from the origin inventory.
+	// Make a copy of the origin item, and decrease it from the origin inventory.
 	// Always TAKE items first to avoid dupe exploits
 	const FStItemData FromSlotCopy = FromSlot->GetCopyOfItemData();
 	const FStItemData ToSlotCopy   = ToSlot->GetCopyOfItemData();
+
+	// Check if destination slot is an equipment slot and can tolerate the item
+    if (ToSlot->GetIsEquipmentSlot())
+    {
+		if ( !FromSlotCopy.GetValidEquipmentSlots().HasTag(ToSlot->GetEquipmentTag()) )
+		{
+			UE_LOGFMT(LogTemp, Error,
+				"{Inventory}({Sv}): Transfer Rejected. Destination slot '{slotType}' doesn't fit this equipment type ({eType})",
+				GetName(), HasAuthority()?"SRV":"CLI",
+				ToSlot->EquipmentTag.ToString(), FromSlotCopy.GetValidEquipmentSlots().ToStringSimple());
+			return;
+		}
+	}
+
+	// Validations
+	OrderQuantity = OrderQuantity > 0 ? OrderQuantity : 1;
     if (!FromSlot->IsSlotEmpty())
     {
         // Remove the items from the origin inventory
@@ -1733,14 +1843,14 @@ void UInventoryComponent::Server_TransferItems_Implementation(
     }
     
     // If decrease was successful (or slot is empty), add it to the destination inventory.
-    const int itemsAdded = TargetInventory->AddItem(FromSlotCopy, OrderQuantity, OriginSlotNumber,
+    const int itemsAdded = TargetInventory->AddItem(FromSlotCopy, OrderQuantity, TargetSlotNumber,
     	false, false, bNotify);
     if (itemsAdded > 0)
     {
     	UE_LOGFMT(LogTemp, Log,
 			"{Inventory}({Sv}): Successfully Transferred x{Quantity} of {ItemName} "
-			"From '{FromInv} {SlotType} #{SlotNum}' to '{ToInv} {ToSlotType} #{ToSlotNum}'",
-			GetName(), HasAuthority()?"SRV":"CLI",
+			"From '{FromInv} #{SlotNum}' to '{ToInv} #{ToSlotNum}'",
+			GetName(), HasAuthority()?"SRV":"CLI", itemsAdded, FromSlotCopy.ToString(),
 			OriginInventory->GetName(), OriginSlotNumber,
 			TargetInventory->GetName(), TargetSlotNumber);
     }

@@ -79,6 +79,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bShowNotifications = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TArray<UStartingItemData*> StartingItems;
+	TArray<FStartingItem> StartingItems;
 	
 };

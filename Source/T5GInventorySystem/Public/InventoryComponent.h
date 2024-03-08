@@ -73,13 +73,16 @@ public:	//functions
 	UFUNCTION(BlueprintPure)
 	FString GetInventorySaveName() const;
 
+	UFUNCTION(BlueprintPure)
+	bool CheckIfSameSlot(const FStInventorySlot& ComparisonSlot, const int SlotNumber) const;
+
 	// If the restore boolean is set, this inventory has an associated save
 	UFUNCTION(BlueprintPure)
 	bool DoesInventorySaveExist() const { return bInventoryRestored; }
 	
 	UFUNCTION(BlueprintCallable)
 	bool LoadInventory(
-		FString& responseStr, FString SaveSlotName, bool isAsync = false);
+		FString& responseStr, FString SaveSlotName, int32 SaveUserIndex = 0, bool isAsync = false);
 
 	virtual void OnComponentCreated() override;
 	
@@ -92,61 +95,67 @@ public:	//functions
 	UFUNCTION(BlueprintPure)
 	int GetNumberOfEquipmentSlots() const;
 
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Accessors")
+	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	FGameplayTag GetSlotInventoryTag(int slotNumber) const;
 
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Equipment Accessors")
+	UFUNCTION(BlueprintPure, Category = "Equipment Accessors")
 	FGameplayTag GetSlotEquipmentTag(int slotNumber) const;
 	
-    UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Accessors")
+    UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	int GetTotalQuantityByItem(const FStItemData& ItemReference) const;
 
-    UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Accessors")
+    UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	int GetFirstEmptySlotNumber() const;
 
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Accessors")
+	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	float GetTotalWeightOfInventorySlots() const;
 
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Accessors")
+	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	float GetTotalWeightOfEquipmentSlots() const;
 
-    UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Accessors")
+    UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	float GetWeightOfSlotNumber(int SlotNumber) const;
 
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Accessors")
+	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	TArray<int> GetInventorySlotNumbersContainingItem(const FStItemData& ItemData) const;
 
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Accessors")
+	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	TArray<int> GetEquipmentSlotNumbersContainingItem(const FStItemData& ItemData) const;
 
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Accessors")
+	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	TArray<FStInventorySlot> GetCopyOfAllSlots() const;
 
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Accessors")
+	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	TArray<FStInventorySlot> GetCopyOfAllInventorySlots() const;
 	
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Equipment Accessors")
+	UFUNCTION(BlueprintPure, Category = "Equipment Accessors")
 	TArray<FStInventorySlot> GetCopyOfAllEquipmentSlots() const;
 
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Accessors")
+	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	int GetSlotNumberByTag(const FGameplayTag& SlotTag);
+
+	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
+	FStItemData GetItemInSlot(int SlotNumber) const;
     
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Slot Validation")
+	UFUNCTION(BlueprintPure, Category = "Inventory Slot Validation")
+	bool IsValidItemInSlot(int SlotNumber) const;
+	
+	UFUNCTION(BlueprintPure, Category = "Inventory Slot Validation")
 	bool IsValidSlotNumber(int SlotNumber) const;
     
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Slot Validation")
-	bool IsValidEquipmentSlot(const FGameplayTag& EquipmentTag) const;
+	UFUNCTION(BlueprintPure, Category = "Inventory Slot Validation")
+	bool IsValidEquipmentSlot(int SlotNumber) const;
     
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Slot Validation")
+	UFUNCTION(BlueprintPure, Category = "Inventory Slot Validation")
 	bool IsValidSlotByEquipmentTag(const FGameplayTag& SearchTag) const;
 
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Slot Validation")
-	bool IsSlotNumberEmpty(int slotNumber) const;
+	UFUNCTION(BlueprintPure, Category = "Inventory Slot Validation")
+	bool IsSlotEmpty(int slotNumber) const;
 
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Slot Validation")
+	UFUNCTION(BlueprintPure, Category = "Inventory Slot Validation")
 	bool IsSlotEmptyByTag(const FGameplayTag& EquipmentTag);
 
-	UFUNCTION(BlueprintPure, BlueprintPure, Category = "Inventory Accessors")
+	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	int GetQuantityOfItemsInSlotNumber(int SlotNumber) const;
     
     UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
@@ -161,8 +170,20 @@ public:	//functions
     	const UItemDataAsset* ItemDataAsset, int OrderQuantity, int SlotNumber,
     	bool bAddOverflow, bool bDropOverflow, bool bNotify);
 
-    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
 	FStInventorySlot GetCopyOfSlotNumber(int slotNumber) const;
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
+	FStInventorySlot GetPrimaryEquipmentSlot();
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
+	FStInventorySlot GetSecondaryEquipmentSlot();
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
+	FStInventorySlot GetRangedEquipmentSlot();
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
+	FStInventorySlot GetAmmunitionEquipmentSlot();
 
 	// Execute on the inventory losing the item
     UFUNCTION(BlueprintCallable, Category = "Inventory Mutators")
@@ -262,11 +283,12 @@ private: //functions
 	void LoadDataDelegate(const FString& SaveSlotName, int32 UserIndex, USaveGame* SaveData);
 
 	UFUNCTION()
-	void SaveInventoryDelegate(const FString& SaveSlotName, int32 UserIndex, USaveGame* SaveData);
+	void SaveInventoryDelegate(const FString& SaveSlotName, int32 UserIndex, const bool bSuccess);
 
 public: //variables
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite)
+	// Used for reinitializing/resetting the inventory and defining starting items / loot
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	UInventoryDataAsset* InventoryDataAsset = nullptr; 
 
 	// If true, saves will only work on the server.
@@ -274,6 +296,10 @@ public: //variables
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory Settings")
 	bool bSavesOnServer = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString SaveFolder = "";
+
+	
 protected: //variables
 
 	UPROPERTY(ReplicatedUsing = OnRep_NewNotification)
@@ -302,11 +328,12 @@ private: //variables
 	FRWLock InventoryMutex;
 
 	UFUNCTION(NetMulticast, Reliable)
-	void OnRep_InventorySlotUpdated(const TArray<FStInventorySlot>& OldSlot);
+	void OnRep_InventorySlotUpdated(const TArray<FStInventorySlot>& OldSlots);
 	
 	UFUNCTION(NetMulticast, Reliable)
 	void OnRep_NewNotification();
 
+	// TODO - Replace replication with a custom replication method, so that we save network resources
 	UPROPERTY(ReplicatedUsing = OnRep_InventorySlotUpdated)
 	TArray<FStInventorySlot> InventorySlots_;
 	
@@ -314,8 +341,19 @@ private: //variables
 
 	bool bInventoryFull = false;
 
+	int PrimarySlot_		= -1;
+	
+	int SecondarySlot_	= -1;
+	
+	int RangedSlot_		= -1;
+	
+	int AmmunitionSlot_		= -1;
+
 	// Used to prevent clients from cheating their inventory
 	bool bInventoryRestored = false;
 
-	bool bShowDebug = false;
+#ifdef UE_BUILD_DEBUG
+	bool bShowDebug = true;
+#endif
+	
 };

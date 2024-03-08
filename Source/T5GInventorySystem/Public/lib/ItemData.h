@@ -16,7 +16,6 @@
 
 #include "ItemData.generated.h"
 
-
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Equipment);	// Used as equipment
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_QuestItem);	// Used in a quest
 UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Drinkable);	// Can be drank
@@ -98,6 +97,7 @@ public:
 	
 	UFUNCTION(BlueprintPure) int			GetItemPrice() const;
 	UFUNCTION(BlueprintPure) int			GetItemMaxStackSize() const;
+	UFUNCTION(BlueprintPure) bool			GetItemCanStack() const;
 	UFUNCTION(BlueprintPure) float			GetItemCarryWeight() const;
 	UFUNCTION(BlueprintPure) float			GetItemMaxDurability() const;
 	UFUNCTION(BlueprintPure) FText			GetItemDisplayName() const;
@@ -108,12 +108,14 @@ public:
 	UFUNCTION(BlueprintPure) UStaticMesh*	GetItemStaticMesh() const;
 	UFUNCTION(BlueprintPure) FTransform		GetItemOriginAdjustments() const;
 	
+	
 	UFUNCTION(BlueprintPure) bool	GetIsItemFragile() const;
 	UFUNCTION(BlueprintPure) bool	GetIsItemDroppable() const;
 	UFUNCTION(BlueprintPure) bool	GetIsItemConsumedOnUse() const;
 	UFUNCTION(BlueprintPure) bool	GetItemHasCategory(const FGameplayTag& ChallengeTag) const;
 	
 	UFUNCTION(BlueprintPure) FGameplayTagContainer GetItemCategories() const;
+	UFUNCTION(BlueprintPure) FGameplayTagContainer GetItemRarities() const;
 
 protected:
 	
@@ -127,7 +129,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) FString ItemDescription = "";
 	
 	// Rarities that this item can appear as. Defaults to Common only.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FGameplayTag ItemRarity;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FGameplayTagContainer ItemRarity;
 
 	// Categories the item belongs to
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)	FGameplayTagContainer ItemCategories;
@@ -206,13 +208,11 @@ public:
  * are items that are spawned on NPCs as loot, vendor items for merchants,
  * or starting items for players.
  */
-UCLASS(BlueprintType)
-class T5GINVENTORYSYSTEM_API UStartingItemData : public UItemDataAsset
+USTRUCT(BlueprintType)
+struct T5GINVENTORYSYSTEM_API FStartingItem
 {
 	GENERATED_BODY()
-
-public:
-
+	
 	// The minimum chance, in percentage (0.0 - 1.0) this item will be chosen
 	// 1.0 will result in always being chosen
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) float	ChanceMinimum = 1.f;
@@ -232,6 +232,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)	int		QuantityMinimum = 1;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)	int		QuantityMaximum = 1;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	UItemDataAsset* ItemReference = nullptr;
 	
 };
 
@@ -285,7 +287,7 @@ struct T5GINVENTORYSYSTEM_API FStItemData
 	bool 	GetIsEmpty() const;
 	bool 	GetIsFull() const;
 	bool 	ActivateItem(bool bForceConsume);
-	bool 	GetIsValidItem() const { return IsValid(Data) && ItemQuantity > 0; }
+	bool 	GetIsValidItem() const;
 	bool 	GetIsItemDamaged() const;
 	bool 	GetIsItemDroppable() const;
 	bool 	GetIsItemFragile() const;
@@ -293,6 +295,32 @@ struct T5GINVENTORYSYSTEM_API FStItemData
 	bool 	GetIsItemBroken() const { return DurabilityNow == 0.f; }
 	
 	bool	bIsEquipped = false;
+
+	// Custom comparison operator, since qualities, quantities and durability may be different
+	// but the item might be the same exact item
+	bool operator== (const FStItemData& ComparisonItem) const
+	{
+		if (IsValid(this->Data) && IsValid(ComparisonItem.Data))
+		{
+			if (this->Data == ComparisonItem.Data)
+			{
+				if (this->Rarity == ComparisonItem.Rarity)
+				{
+					return (this->DurabilityNow == ComparisonItem.DurabilityNow);
+				}
+			}
+		}
+		return false;
+	}
+
+	// Custom comparison operator, since qualities, quantities and durability may be different
+	// but the item might be the same exact item
+	bool operator != (const FStItemData& ComparisonItem) const
+	{
+		if (!IsValid(this->Data) || !IsValid(ComparisonItem.Data)) { return true; }
+		if (this->Data != ComparisonItem.Data) { return true; }
+		return (this->Rarity != ComparisonItem.Rarity);
+	}
 
 	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) int ItemQuantity;
 
@@ -303,6 +331,6 @@ struct T5GINVENTORYSYSTEM_API FStItemData
 	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) FGameplayTag Rarity;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	const UItemDataAsset* Data; // References the data asset with static info
+	const UItemDataAsset* Data = nullptr; // References the data asset with static info
 	
 };
