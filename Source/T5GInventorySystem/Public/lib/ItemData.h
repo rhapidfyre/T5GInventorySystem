@@ -9,45 +9,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "NativeGameplayTags.h"
+#include "EquipmentData.h"
+#include "EquipmentItem.h"
+#include "GameplayEffect.h"
 #include "Engine/DataTable.h"
 #include "Delegates/Delegate.h"
 #include "GameplayTags/Public/GameplayTags.h"
+#include "Data/InventoryTags.h"
 
 #include "ItemData.generated.h"
-
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Equipment);	// Used as equipment
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_QuestItem);	// Used in a quest
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Drinkable);	// Can be drank
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Edible);		// Can be eaten
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_MeleeWeapon);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_RangedWeapon);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Placeable);	// Can be placed like furniture
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Currency);		// Used as a type of currency
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Fuel);			// Used as fuel for a forge or fire
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Utility);		// An item that provide a function when in possession
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Ingredient);	// Used as an ingredient to a crafting recipe
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Category_Component);	// Used as part of a final product, like a battery
-
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Generic);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Equipment);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Edible);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Drink);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Focus);
-
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Trash);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Common);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Uncommon);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Rare);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Legendary);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Rarity_Divine);
-
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Activation_Trigger); // Default behavior
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Activation_Equip);   // Activating equips it
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Activation_Drink);   // Activating drinks it
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Activation_Eat);     // Activating eats it
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Item_Activation_Emplace); // Starts the placement system
-
 
 USTRUCT(BlueprintType)
 struct T5GINVENTORYSYSTEM_API FCraftingRecipe
@@ -93,7 +63,7 @@ class T5GINVENTORYSYSTEM_API UPrimaryItemDataAsset : public UPrimaryDataAsset
 public:
 
 	UPrimaryItemDataAsset()
-		: ItemType(TAG_Item_Generic.GetTag()), ItemRarity(TAG_Item_Rarity_Trash) {};
+		: ItemType(TAG_Item_Category_None.GetTag()), ItemRarity(TAG_Item_Rarity_Trash) {};
 	
 	UFUNCTION(BlueprintPure) int			GetItemPrice() const;
 	UFUNCTION(BlueprintPure) int			GetItemMaxStackSize() const;
@@ -191,7 +161,7 @@ public:
 	
 	UFUNCTION(BlueprintPure) UItemDataAsset* CopyAsset() const;
 	
-	UFUNCTION(BlueprintPure) bool	GetCanItemActivate() const;
+	UFUNCTION(BlueprintPure) bool	GetItemCanActivate() const;
 	
 	virtual void	GetItemTagOptions(FGameplayTagContainer& TagOptions) const;
 
@@ -200,6 +170,68 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite) FCraftingRecipe CraftingRecipe;
 	
+	// Effects to execute when the item is activated
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<UGameplayEffect*> ActivationEffects = {};
+	
+	// Abilities to execute when the item is activated
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<UGameplayAbility*> ActivationAbilities = {};
+	
+};
+
+
+/**
+ * Equipment items are subsets (children) of Item Data that contain information
+ * specifically regarding equipment, such as what mesh is used when it is worn
+ */
+UCLASS(BlueprintType)
+class T5GINVENTORYSYSTEM_API UEquipmentDataAsset : public UItemDataAsset
+{
+	GENERATED_BODY()
+
+
+public:
+
+	UEquipmentDataAsset() {};
+
+	UFUNCTION(BlueprintType)
+	bool GetCanEquipInSlot(const FGameplayTag& EquipmentSlotTag) const
+	{
+		return EquippableSlots.HasTag(EquipmentSlotTag);
+	}
+
+	FGameplayTagContainer GetItemEquippableSlots() const
+	{
+		return EquippableSlots;
+	}
+
+	virtual void GetItemTagOptions(FGameplayTagContainer& TagOptions) const override;
+
+	// If true, the equipment will start equipped (donned/armed)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bStartEquipped = false;
+	
+	// The mesh worn by typically masculine wearers. This is the default if feminine is nullptr.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	USkeletalMesh* MeshMasculine = nullptr;
+
+	// The mesh used by typically feminine wearers.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)	USkeletalMesh* MeshFeminine  = nullptr;
+	
+	// Which equipment slots this item can occupy (Equipment.Slot.Torso)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTagContainer EquippableSlots = {};
+	
+	// What body part this mesh is associated with (Character.Body.Torso)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTagContainer RelatedBodyPartTag = {};
+	
+	// Which body parts will be hidden if this mesh is equipped. Overridden by "ShowsBodyParts"
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTagContainer HidesBodyParts = {};
+	
+	// Which body parts MUST be visible if this mesh is equipped. Overrules "ShowsBodyParts".
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) FGameplayTagContainer ShowsBodyParts = {};
+	
+	// Effect(s) to apply as long as the item is equipped
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<UGameplayEffect*> EffectsEquipped = {};
+	
+	// Effect(s) to apply to the character who has this item in their inventory
+	UPROPERTY(EditAnywhere, BlueprintReadWrite) TArray<UGameplayEffect*> EffectsPassive = {};
 };
 
 
@@ -238,7 +270,7 @@ struct T5GINVENTORYSYSTEM_API FStartingItem
 };
 
 
-/** Used for tracking items in an inventory slot */
+/** Obsolete. Replaced by FItemStatics */
 USTRUCT(BlueprintType)
 struct T5GINVENTORYSYSTEM_API FStItemData
 {
@@ -263,9 +295,12 @@ struct T5GINVENTORYSYSTEM_API FStItemData
 	bool GetIsValidEquipmentItem() const;
 	bool GetIsValidFitToSlot(const FGameplayTag& SlotTag) const;
 	
+	const UEquipmentDataAsset* GetItemDataAsEquipment() const;
+	
 	FGameplayTagContainer GetValidEquipmentSlots() const;
 
 	FString ToString() const;
+	
 	float 	GetMaxDurability() const;
 	float 	GetModifiedItemValue() const;
 	float 	GetBaseItemValue() const;
@@ -313,15 +348,6 @@ struct T5GINVENTORYSYSTEM_API FStItemData
 		return false;
 	}
 
-	// Custom comparison operator, since qualities, quantities and durability may be different
-	// but the item might be the same exact item
-	bool operator != (const FStItemData& ComparisonItem) const
-	{
-		if (!IsValid(this->Data) || !IsValid(ComparisonItem.Data)) { return true; }
-		if (this->Data != ComparisonItem.Data) { return true; }
-		return (this->Rarity != ComparisonItem.Rarity);
-	}
-
 	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) int ItemQuantity;
 
 	// Current Durability (Data-Durability is the max durability of this item)
@@ -330,7 +356,22 @@ struct T5GINVENTORYSYSTEM_API FStItemData
 	// Actual Item Rarity (Data->Rarity is for generating this item)
 	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) FGameplayTag Rarity;
 
+	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) FString CrafterName = "";
+
+	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) UGameplayEffect* StatsEffect = {};
+
+	UPROPERTY(SaveGame) FPrimaryAssetId PrimaryAssetId;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	const UItemDataAsset* Data = nullptr; // References the data asset with static info
+	
+	// Custom comparison operator, since qualities, quantities and durability may be different
+	// but the item might be the same exact item
+	bool operator != (const FStItemData& ComparisonItem) const
+	{
+		if (!IsValid(this->Data) || !IsValid(ComparisonItem.Data)) { return true; }
+		if (this->Data != ComparisonItem.Data) { return true; }
+		return (this->Rarity != ComparisonItem.Rarity);
+	}
 	
 };

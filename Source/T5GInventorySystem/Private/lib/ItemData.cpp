@@ -4,37 +4,6 @@
 #include "lib/EquipmentData.h"
 #include "lib/InventorySlot.h"
 
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Equipment, 	"Item.Category.Equipment");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_QuestItem, 	"Item.Category.QuestItem");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Drinkable, 	"Item.Category.Drinkable");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Edible, 		"Item.Category.Edible");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_MeleeWeapon, 	"Item.Category.MeleeWeapon");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_RangedWeapon, 	"Item.Category.RangedWeapon");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Placeable, 	"Item.Category.Placeable");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Currency, 		"Item.Category.Currency");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Fuel, 			"Item.Category.Fuel");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Utility, 		"Item.Category.Utility");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Ingredient, 	"Item.Category.Ingredient");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Category_Component, 	"Item.Category.Component");
-
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Generic,		"Item.Generic");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Equipment,		"Item.Equipment");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Edible,			"Item.Edible");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Drink,			"Item.Drink");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Focus,			"Item.Focus");
-
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Rarity_Trash,		"Item.Rarity.Trash");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Rarity_Common,		"Item.Rarity.Common");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Rarity_Uncommon,	"Item.Rarity.Uncommon");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Rarity_Rare,		"Item.Rarity.Rare");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Rarity_Legendary,	"Item.Rarity.Legendary");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Rarity_Divine,		"Item.Rarity.Divine");
-
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Activation_Trigger,	"Item.Rarity.Trigger");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Activation_Equip,	"Item.Rarity.Equip");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Activation_Drink,	"Item.Rarity.Drink");
-UE_DEFINE_GAMEPLAY_TAG(TAG_Item_Activation_Eat,		"Item.Rarity.Eat");
-
 
 UItemDataAsset* UItemDataAsset::CopyAsset() const
 {
@@ -136,10 +105,11 @@ bool UPrimaryItemDataAsset::GetItemHasCategory(const FGameplayTag& ChallengeTag)
 	return ItemCategories.HasTag(ChallengeTag);
 }
 
-bool UItemDataAsset::GetCanItemActivate() const
+bool UItemDataAsset::GetItemCanActivate() const
 {
-	if (ItemActivation.IsValid()) { return true; }
-	return false;
+	FGameplayTagContainer TagOptions;
+	GetItemTagOptions(TagOptions);
+	return TagOptions.HasTag(TAG_Item_Activates);
 }
 
 /**
@@ -207,6 +177,7 @@ FStItemData::FStItemData(const FStItemData& OldItem, int OverrideQuantity)
 			DurabilityNow	= OldItem.Data->GetItemMaxDurability();
 			Rarity			= OldItem.Data->GetItemRarity();
 			Data			= OldItem.Data->CopyAsset();
+			PrimaryAssetId = Data->GetPrimaryAssetId();
 			return;
 		}
 	}
@@ -371,12 +342,22 @@ int FStItemData::GetMaxStackSize() const
 //Resets the item to a default, invalid item struct.
 void FStItemData::DestroyItem()
 {
+	// Clear all bindings
+	if (OnItemUpdated.IsBound())    		{ OnItemUpdated.Clear(); }
+	if (OnItemActivation.IsBound()) 		{ OnItemActivation.Clear(); }
+	if (OnItemQuantityChanged.IsBound()) 	{ OnItemQuantityChanged.Clear(); }
+	if (OnItemDurabilityChanged.IsBound()) 	{ OnItemDurabilityChanged.Clear(); }
 	*this = FStItemData();
 }
 
 // Replaces this struct with the incoming struct
 void FStItemData::ReplaceItem(const FStItemData& NewItem)
 {
+	// Clear all bindings
+	if (OnItemUpdated.IsBound())    		{ OnItemUpdated.Clear(); }
+	if (OnItemActivation.IsBound()) 		{ OnItemActivation.Clear(); }
+	if (OnItemQuantityChanged.IsBound()) 	{ OnItemQuantityChanged.Clear(); }
+	if (OnItemDurabilityChanged.IsBound()) 	{ OnItemDurabilityChanged.Clear(); }
 	*this = FStItemData(NewItem);
 }
 
@@ -388,7 +369,7 @@ float FStItemData::GetWeight() const
 
 bool FStItemData::GetCanActivate() const
 {
-	if (GetIsValidItem()) { return Data->GetCanItemActivate();}
+	if (GetIsValidItem()) { return Data->GetItemCanActivate();}
 	return false;
 }
 
@@ -431,7 +412,7 @@ bool FStItemData::ActivateItem(bool bForceConsume)
 {
 	if (GetIsValidItem())
 	{
-		if (Data->GetCanItemActivate())
+		if (Data->GetItemCanActivate())
 		{
 			if (bForceConsume)
 			{
@@ -486,26 +467,33 @@ bool FStItemData::GetIsExactSameItem(const FStItemData& ItemStruct) const
 
 bool FStItemData::GetIsValidEquipmentItem() const
 {
-	if (IsValid(Data))
+	if (GetIsValidItem())
 	{
-		FGameplayTagContainer TagContainer;
-		Data->GetItemTagOptions(TagContainer);
-		return TagContainer.HasTag(TAG_Item_Equipment);
+		return IsValid(Cast<UEquipmentDataAsset>(Data));
 	}
 	return false;
 }
 
 bool FStItemData::GetIsValidFitToSlot(const FGameplayTag& SlotTag) const
 {
-	if (GetIsValidItem())
+	if (GetIsValidEquipmentItem())
 	{
-		const UEquipmentItemData* EquipmentData = Cast<UEquipmentItemData>( Data );
+		const UEquipmentDataAsset* EquipmentData = Cast<UEquipmentDataAsset>( Data );
 		if (IsValid(EquipmentData))
 		{
 			return EquipmentData->EquippableSlots.HasTag(SlotTag);
 		}
 	}
 	return false;
+}
+
+const UEquipmentDataAsset* FStItemData::GetItemDataAsEquipment() const
+{
+	if (GetIsValidEquipmentItem())
+	{
+		return Cast<UEquipmentDataAsset>(Data);
+	}
+	return nullptr;
 }
 
 bool FStItemData::GetIsItemDamaged() const

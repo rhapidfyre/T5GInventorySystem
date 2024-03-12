@@ -1,129 +1,96 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "ItemData.h"
-#include "InventoryData.h"
+#include "InventorySave.h"
+#include "Delegates/Delegate.h"
 
 #include "InventorySlot.generated.h"
 
 class UInventoryComponent;
+class UItemDataAsset;
 
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Inventory);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Inventory_Slot);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Inventory_Slot_Uninit);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Inventory_Slot_Generic);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Inventory_Slot_Equipment);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Inventory_Slot_Locked);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Inventory_Slot_Mirrored);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Inventory_Slot_Hidden);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSlotUpdated, int, SlotNumber);
 
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Uninit);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Primary);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Secondary);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Ranged);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Ammunition);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Head);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Face);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Neck);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Torso);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Shoulders);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Arms);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Wrists);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Wrists_Left);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Wrists_Right);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Ring);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Ring_Left);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Ring_Right);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Waist);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Legs);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Anklet);
-UE_DECLARE_GAMEPLAY_TAG_EXTERN(TAG_Equipment_Slot_Feet);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSlotItemChanged,
+	int, SlotNumber, const UItemDataAsset*, OldItem);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSlotActivated,
+	int, SlotNumber, const UItemDataAsset*, ActivatedItem);
 
 
-USTRUCT(BlueprintType)
-struct T5GINVENTORYSYSTEM_API FStInventorySlot
+UCLASS(Blueprintable, BlueprintType)
+class T5GINVENTORYSYSTEM_API UInventorySlot : public UObject
 {
 	GENERATED_BODY()
 
-	TMulticastDelegate<void(int SlotNumber)> OnSlotActivated;
-	TMulticastDelegate<void(int SlotNumber)> OnSlotUpdated;
+public:
+
+	// Called when the item in the slot has changed
+	UPROPERTY(Blueprintable) FOnSlotItemChanged	OnSlotItemChanged;
+	// Called when the item in the slot has activated
+	UPROPERTY(Blueprintable) FOnSlotActivated	OnSlotActivated;
+	// Called whenever the slot has updated, such as durability or quantity
+	UPROPERTY(Blueprintable) FOnSlotUpdated		OnSlotUpdated;
+
+	UInventorySlot() {SlotTags.AddTag(TAG_Inventory_Slot_Generic.GetTag());};
 	
-	FStInventorySlot();
-	FStInventorySlot(const FGameplayTag& InvSlotType);
-	FStInventorySlot(const FStItemData& ItemReference);
-	FStInventorySlot(const UItemDataAsset* ItemDataAsset, int OrderQuantity = 1);
-
-	~FStInventorySlot();
-
-	void SetAsEquipmentSlot(const FGameplayTag& NewEquipmentTag);
-
-	void OnItemUpdated() const;
-	void OnItemActivated() const;
-	void OnItemDurabilityChanged(const float OldDurability, const float NewDurability) const;
+	UInventorySlot(const FGameplayTag& SlotTypeTag);
 	
-	FGameplayTag	GetEquipmentTag() const;
-	FStItemData*	GetItemData();
-	FStItemData		GetCopyOfItemData() const;
+	UFUNCTION(NetMulticast, Reliable) void OnRep_AssetId(); // Loads thru Asset Manager
+	UFUNCTION(NetMulticast, Reliable) void OnRep_ItemUpdated(const FItemStatics& ItemPreChanges);
+	UFUNCTION(NetMulticast, Reliable) void OnRep_QuantityUpdated(int OldQuantity);
+
+	UFUNCTION(BlueprintPure) FItemStatics GetItemStatics() const { return ItemStatics_; }
 	
-	void		 SetNewItemInSlot(
-					const FStItemData& ReferenceItem, const int OverrideQuantity = 0);
+	UFUNCTION(BlueprintPure) const UItemDataAsset* GetItemData() const { return DataAsset_; }
 
-	bool		 GetIsEquipmentSlot() const { return SlotTag == TAG_Inventory_Slot_Equipment.GetTag(); }
-	void 		 DamageDurability(float DamageAmount = 0.f);
-	void 		 RepairDurability(float RepairAmount = 0.f);
+	// Returns the quantity of items in slot, ensuring a return from 0-inf
+	UFUNCTION(BlueprintCallable) bool SetQuantity(int OrderQuantity = 1);
+	UFUNCTION(BlueprintCallable) int  DecreaseQuantity(int OrderQuantity = 1);
+	UFUNCTION(BlueprintCallable) int  IncreaseQuantity(int OrderQuantity = 1);
+	UFUNCTION(BlueprintPure)	 int  GetQuantity() const { return Quantity_ > 0 ? Quantity_ : 0;}
+	
+	bool GetIsEquipmentSlot() const;
+	
+	bool SetDurability(float DurabilityValue = 0.f);
+	float DamageDurability(float DamageAmount = 0.f);
+	float RepairDurability(float RepairAmount = 0.f);
+	UFUNCTION(BlueprintPure) float GetDurability() const;
+	
+	int	 GetMaxStackAllowance() const;
+	void Activate();
+	bool ContainsItem(const UItemDataAsset* DataAsset,
+		const FItemStatics& ItemStatics = FItemStatics()) const;
+	
+	// Sets the item that is in this slot
+	void AddItem(const FName& ItemName, int NewQuantity = 1);
 
-	bool		 SetQuantity(int NewQuantity);
-	int 		 IncreaseQuantity(int OrderQuantity = 1);
-	int 		 DecreaseQuantity(int OrderQuantity = 1);
-	int			 GetQuantity() const;
+	void AddItem(const FItemStatics& ItemStatics, int NewQuantity = 1);
 
-	bool		 ContainsValidItem() const;
-	bool 		 IsSlotEmpty() const;
-	bool		 IsSlotFull() const;
+	// Makes a 1-for-1 copy of the item in an existing inventory slot
+	void CopyItemFromSlot(const UInventorySlot* SlotReference, int NewQuantity = 0);
 
-	float		 GetWeight() const;
-	void 		 EmptyAndResetSlot();
-	int	 		 GetMaxStackAllowance() const;
-	void 		 Activate();
-	bool 		 ContainsItem(
-					const FStItemData& ItemData, const bool bExact = false) const;
+	bool ContainsValidItem() const;
 
-	int64 LastUpdate = 0;
+	void ResetAndEmptySlot();
 
-	bool operator==(const FStInventorySlot& ComparisonSlot) const
-	{
-		if (ParentInventory != nullptr)					{ return false; }
-		if (ComparisonSlot.ParentInventory != nullptr)	{ return false; }
-		if (ComparisonSlot.ParentInventory == ParentInventory)
-		{
-			if (ComparisonSlot.SlotNumber  == SlotNumber)
-			{
-				if (ComparisonSlot.SlotTag == SlotTag)
-				{
-					return (ComparisonSlot.SlotItemData == SlotItemData);
-				}
-			}
-		}
-		return false;
-	}
-
+	bool IsSlotEmpty() const;
+	
+private:
+	
 	UPROPERTY() UInventoryComponent* ParentInventory = nullptr;
 	
-	// The proper item information for the item that is "in" this slot
-	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) FStItemData SlotItemData;
+	UFUNCTION() void AssetLoadedDelegate(); // Called when asset loads
+	
+	UPROPERTY(ReplicatedUsing=OnRep_AssetId)		 FPrimaryAssetId AssetId_;
+	UPROPERTY(ReplicatedUsing=OnRep_ItemUpdated)	 FItemStatics	 ItemStatics_;
+	UPROPERTY(ReplicatedUsing=OnRep_QuantityUpdated) int			 Quantity_ = 0;
 
-	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite) bool bHideSlotIfEmpty = false;
+	// Set by OnRep_AssetId. If pointer is valid, slot contains a valid item.
+	UPROPERTY() const UItemDataAsset* DataAsset_ = nullptr;
+	
+	UPROPERTY(Replicated) int SlotNumber_ = 0;
 
-	// The type of this inventory slot
-	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite)
-	FGameplayTag SlotTag = TAG_Inventory_Slot_Generic;
-
-	// The equipment relationship to this inventory slot
-	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite)
-	FGameplayTag EquipmentTag = FGameplayTag::EmptyTag;
-
-	UPROPERTY(SaveGame) int SlotNumber = -1;
+	FGameplayTagContainer SlotTags;
 	
 };

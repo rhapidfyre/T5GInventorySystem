@@ -42,7 +42,6 @@ public:	//functions
 	 * CONSTRUCTOR(S)
 	 */
     UInventoryComponent();
-	
 
     /**
      * EVENTS / DELEGATES
@@ -262,6 +261,8 @@ private: //functions
 	UFUNCTION() virtual void SlotUpdated(const int SlotNumber);
 
 	void Helper_SaveInventory(USaveGame*& SaveData) const;
+
+	bool Helper_CreateItem(const FPrimaryAssetId& AssetId);
 
 	UFUNCTION(BlueprintCallable, BlueprintCallable, Category = "Inventory Mutators")
 	int IncreaseSlotQuantity(FStInventorySlot& InventorySlot, int OrderQuantity = 1, bool bNotify = false);

@@ -3,7 +3,6 @@
 
 #include "lib/InventorySlot.h"
 
-/*
 TArray<FStInventorySlot> UInventorySave::LoadInventorySlots()
 {
 	return InventorySlots_;
@@ -20,4 +19,3 @@ void UInventorySave::SaveInventorySlots(TArray<FStInventorySlot> ArrayOfCopiedSl
 			{ InventorySlots_.Add( FStItemData() ); }
 	}
 }
-*/

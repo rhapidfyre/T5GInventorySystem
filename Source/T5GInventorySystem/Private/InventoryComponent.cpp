@@ -4,6 +4,7 @@
 
 #include "InventorySystemGlobals.h"
 #include "PickupActorBase.h"
+#include "Engine/AssetManager.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
