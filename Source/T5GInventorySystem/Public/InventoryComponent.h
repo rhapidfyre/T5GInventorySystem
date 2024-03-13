@@ -8,9 +8,10 @@
 
 #include "InventoryComponent.generated.h"
 
-
 // Blueprints can only subscribe to dynamic delegates
 
+struct FInventorySlotSaveData;
+class UInventoryDataAsset;
 /* Delegate that is called whenever a new notification is added to the item notification array.
  * Tells the client that there is an item to be processed.
  */
@@ -27,7 +28,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnItemActivated,
 
 /* Delegate that is called whenever the inventory is 'opened' or 'closed'. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnInventoryInUse,
-		const AActor*, InUseActor, const bool, IsInUse);
+const AActor*, InUseActor, const bool, IsInUse);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInventoryRestored,
+											bool, bWasSuccessful);
 
 
 
@@ -55,8 +59,8 @@ public:	//functions
 	UPROPERTY(BlueprintAssignable, Category = "Inventory Events")
 	FOnItemActivated OnItemActivated;
 	
-	TMulticastDelegate<void(bool)> OnInventorySaved;
-	TMulticastDelegate<void(bool)> OnInventoryRestored;
+	UPROPERTY(Blueprintable)
+	FOnInventoryRestored OnInventoryRestored;
 	
 	/**
 	 * ACCESSORS, MUTATORS & HELPERS
@@ -73,7 +77,7 @@ public:	//functions
 	FString GetInventorySaveName() const;
 
 	UFUNCTION(BlueprintPure)
-	bool CheckIfSameSlot(const FStInventorySlot& ComparisonSlot, const int SlotNumber) const;
+	bool CheckIfSameSlot(const UInventorySlot* ComparisonSlot, const int SlotNumber) const;
 
 	// If the restore boolean is set, this inventory has an associated save
 	UFUNCTION(BlueprintPure)
@@ -95,13 +99,13 @@ public:	//functions
 	int GetNumberOfEquipmentSlots() const;
 
 	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
-	FGameplayTag GetSlotInventoryTag(int slotNumber) const;
+	FGameplayTagContainer GetSlotInventoryTags(int slotNumber) const;
 
 	UFUNCTION(BlueprintPure, Category = "Equipment Accessors")
 	FGameplayTag GetSlotEquipmentTag(int slotNumber) const;
 	
     UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
-	int GetTotalQuantityByItem(const FStItemData& ItemReference) const;
+	int GetTotalQuantityByItem(const FName& ItemName) const;
 
     UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	int GetFirstEmptySlotNumber() const;
@@ -116,26 +120,22 @@ public:	//functions
 	float GetWeightOfSlotNumber(int SlotNumber) const;
 
 	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
-	TArray<int> GetInventorySlotNumbersContainingItem(const FStItemData& ItemData) const;
+	TArray<int> GetInventorySlotNumbersContainingItem(
+		const FName& ItemName, const FItemStatics& ItemStatics = FItemStatics()) const;
 
 	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
-	TArray<int> GetEquipmentSlotNumbersContainingItem(const FStItemData& ItemData) const;
+	TArray<int> GetEquipmentSlotNumbersContainingItem(
+		const FName& ItemName, const FItemStatics& ItemStatics = FItemStatics()) const;
 
 	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
-	TArray<FStInventorySlot> GetCopyOfAllSlots() const;
+	int GetSlotNumberByTag(const FGameplayTag& SlotTag) const;
 
 	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
-	TArray<FStInventorySlot> GetCopyOfAllInventorySlots() const;
-	
-	UFUNCTION(BlueprintPure, Category = "Equipment Accessors")
-	TArray<FStInventorySlot> GetCopyOfAllEquipmentSlots() const;
-
-	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
-	int GetSlotNumberByTag(const FGameplayTag& SlotTag);
-
-	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
-	FStItemData GetItemInSlot(int SlotNumber) const;
+	FItemStatics GetSlotNumberItem(int SlotNumber) const;
     
+	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
+	const UItemDataAsset* GetSlotNumberItemData(int SlotNumber) const;
+	
 	UFUNCTION(BlueprintPure, Category = "Inventory Slot Validation")
 	bool IsValidItemInSlot(int SlotNumber) const;
 	
@@ -155,39 +155,32 @@ public:	//functions
 	bool IsSlotEmptyByTag(const FGameplayTag& EquipmentTag);
 
 	UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
-	int GetQuantityOfItemsInSlotNumber(int SlotNumber) const;
+	int GetQuantityInSlotNumber(int SlotNumber) const;
     
     UFUNCTION(BlueprintPure, Category = "Inventory Accessors")
 	bool GetIsInventorySystemReady() const { return bInventoryReady; }
 	
 	UFUNCTION(BlueprintCallable, Category = "Item Management")
 	int AddItem(
-		const FStInventorySlot& NewItem, int OrderQuantity, int SlotNumber = -1,
+		const UInventorySlot* NewItem, int OrderQuantity, int SlotNumber = -1,
 		bool bAddOverflow = true, bool bDropOverflow = true, bool bNotify = false);
 	
     int AddItemFromDataAsset(
     	const UItemDataAsset* ItemDataAsset, int OrderQuantity, int SlotNumber,
     	bool bAddOverflow, bool bDropOverflow, bool bNotify);
 
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-	FStInventorySlot GetCopyOfSlotNumber(int slotNumber) const;
+	const UInventorySlot* GetPrimaryEquipmentSlot();
 
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-	FStInventorySlot GetPrimaryEquipmentSlot();
+	const UInventorySlot* GetSecondaryEquipmentSlot();
 
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-	FStInventorySlot GetSecondaryEquipmentSlot();
+	const UInventorySlot* GetRangedEquipmentSlot();
 
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-	FStInventorySlot GetRangedEquipmentSlot();
-
-	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Inventory Accessors")
-	FStInventorySlot GetAmmunitionEquipmentSlot();
+	const UInventorySlot* GetAmmunitionEquipmentSlot();
 
 	// Execute on the inventory losing the item
     UFUNCTION(BlueprintCallable, Category = "Inventory Mutators")
 	int RemoveItemByQuantity(
-		const FStItemData& ItemReference, int OrderQuantity = 1,
+		const FItemStatics& ItemReference, int OrderQuantity = 1,
 		bool bRemoveEquipment = false, bool bDropOnGround = false, bool bRemoveAll = false);
 
 	// Execute on the inventory losing the item
@@ -223,11 +216,11 @@ protected:
 	
 	UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
 	int SwapOrStackSlots(
-		FStInventorySlot& OriginSlot, FStInventorySlot& TargetSlot, int& RemainingQuantity);
+		UInventorySlot* OriginSlot, UInventorySlot* TargetSlot, int& RemainingQuantity);
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory Setters")
 	int SplitStack(
-		FStInventorySlot& OriginSlot, FStInventorySlot& TargetSlot,
+		UInventorySlot* OriginSlot, UInventorySlot* TargetSlot,
 		int OrderQuantity, bool bNotify = false);
 
 	UFUNCTION(Server, Reliable)
@@ -248,36 +241,44 @@ protected:
 
 	UFUNCTION(Client, Reliable)	void Client_InventoryRestored();
 	
-	UFUNCTION(Server, Reliable, BlueprintCallable)
+	UFUNCTION(Server, Reliable)
 	void Server_RestoreSavedInventory(
-		const TArray<FStInventorySlot>& RestoredInventory);
+		const TArray<FInventorySlotSaveData>& RestoredInventory);
 	
-	void RestoreInventory(const TArray<FStInventorySlot>& RestoredInventory);
+	void RestoreInventory(const TArray<FInventorySlotSaveData>& RestoredInventory);
     
-	FStInventorySlot* GetSlotReference(int SlotNumber);
+	UInventorySlot* GetInventorySlot(int SlotNumber) const;
+
+	int GetSlotNumber(const UInventorySlot* SlotReference) const;
+    
+	TArray<UInventorySlot*> GetAllSlots() const;
+	
+	TArray<UInventorySlot*> GetAllInventorySlots() const;
+	
+	TArray<UInventorySlot*> GetAllEquipmentSlots() const;
+
+	UFUNCTION(BlueprintCallable, BlueprintCallable, Category = "Inventory Mutators")
+	int IncreaseSlotQuantity(int SlotNumber, int OrderQuantity = 1, bool bNotify = false);
+	
+	UFUNCTION(BlueprintCallable, BlueprintCallable, Category = "Inventory Mutators")
+	int DecreaseSlotQuantity(int SlotNumber, int OrderQuantity = 1, bool bNotify = false);
 
 private: //functions
 
-	UFUNCTION() virtual void SlotUpdated(const int SlotNumber);
+	UFUNCTION() virtual void NotifySlotUpdated(const int SlotNumber);
 
 	void Helper_SaveInventory(USaveGame*& SaveData) const;
 
 	bool Helper_CreateItem(const FPrimaryAssetId& AssetId);
-
-	UFUNCTION(BlueprintCallable, BlueprintCallable, Category = "Inventory Mutators")
-	int IncreaseSlotQuantity(FStInventorySlot& InventorySlot, int OrderQuantity = 1, bool bNotify = false);
-	
-	UFUNCTION(BlueprintCallable, BlueprintCallable, Category = "Inventory Mutators")
-    int DecreaseSlotQuantity(FStInventorySlot& InventorySlot, int OrderQuantity = 1, bool bNotify = false);
 	
 	UFUNCTION(BlueprintCallable, BlueprintCallable, Category = "Slot Mutators")
-	void SendNotification(const FStItemData ItemData, int OrderQuantity = 1);
+	void SendNotification(const FName& ItemName, int OrderQuantity = 1);
 
-	UFUNCTION(BlueprintCallable) void ResetSlot(FStInventorySlot& InventorySlot);
+	UFUNCTION(BlueprintCallable) void ResetSlot(UInventorySlot* InventorySlot);
 
 	UFUNCTION(BlueprintCallable)	
     bool TransferItemBetweenSlots(
-        FStInventorySlot& OriginSlot, FStInventorySlot& TargetSlot,
+        UInventorySlot* OriginSlot, UInventorySlot* TargetSlot,
         int OrderQuantity = 1, bool bDropOverflow = false);
 	
 	UFUNCTION()
@@ -319,6 +320,10 @@ protected: //variables
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	float MaxInventoryReach_ = 1024.f;
+
+	const FString GetFullSavePath() const { return SaveFolder + SaveSlotName_; }
+
+	const int32 GetSaveUserIndex() const { return SaveUserIndex_; }
 	
 private: //variables
 
@@ -328,15 +333,17 @@ private: //variables
 	 */
 	FRWLock InventoryMutex;
 
+	void MapEquipmentSlot(const FGameplayTag& EquipmentTag, int SlotNumber);
+	
 	UFUNCTION(NetMulticast, Reliable)
-	void OnRep_InventorySlotUpdated(const TArray<FStInventorySlot>& OldSlots);
+	void OnRep_InventorySlotUpdated(const TArray<UInventorySlot*>& OldSlots);
 	
 	UFUNCTION(NetMulticast, Reliable)
 	void OnRep_NewNotification();
 
 	// TODO - Replace replication with a custom replication method, so that we save network resources
 	UPROPERTY(ReplicatedUsing = OnRep_InventorySlotUpdated)
-	TArray<FStInventorySlot> InventorySlots_;
+	TArray<UInventorySlot*> InventorySlots_;
 	
 	bool bInventoryReady = false;
 

@@ -1,7 +1,6 @@
 
 #include "lib/ItemData.h"
 
-#include "lib/EquipmentData.h"
 #include "lib/InventorySlot.h"
 
 

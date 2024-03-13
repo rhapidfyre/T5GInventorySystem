@@ -26,7 +26,7 @@ public:
 	float SphereRadius = 64.0f;
 
 	UFUNCTION(BlueprintCallable)
-	void SetupItem(const FStItemData& ItemData, int OrderQuantity = 1);
+	void SetupItem(const FItemStatics& ItemData, int OrderQuantity = 1);
 
 	UFUNCTION(BlueprintPure) int		 GetItemQuantity() const { return ItemQuantity; }
 	UFUNCTION(BlueprintPure) FStItemData GetItemData() const { return ItemData; }

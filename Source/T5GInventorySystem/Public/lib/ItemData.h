@@ -9,8 +9,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "EquipmentData.h"
-#include "EquipmentItem.h"
 #include "GameplayEffect.h"
 #include "Engine/DataTable.h"
 #include "Delegates/Delegate.h"
@@ -18,6 +16,9 @@
 #include "Data/InventoryTags.h"
 
 #include "ItemData.generated.h"
+
+#define ITEM_WEIGHT_DEFAULT 1.f
+#define ITEM_WEIGHT_EMPTY   0.f
 
 USTRUCT(BlueprintType)
 struct T5GINVENTORYSYSTEM_API FCraftingRecipe

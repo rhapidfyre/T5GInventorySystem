@@ -144,14 +144,13 @@ void APickupActorBase::SetupItemData()
  * @param NewItemData The item to be copied
  * @param OrderQuantity The number of items in this pickup actor
  */
-void APickupActorBase::SetupItem(const FStItemData& NewItemData, int OrderQuantity)
+void APickupActorBase::SetupItem(const FItemStatics& NewItemData, int OrderQuantity)
 {
 	if (!bReady) { return; }
 	if (!HasActorBegunPlay())
 	{
-		const int NewQuantity = OrderQuantity > 0 ? OrderQuantity : NewItemData.ItemQuantity;
 		ItemData		= NewItemData;
-		ItemQuantity	= NewQuantity;
+		ItemQuantity	= OrderQuantity;
 		SetupItemData();
 	}
 }
